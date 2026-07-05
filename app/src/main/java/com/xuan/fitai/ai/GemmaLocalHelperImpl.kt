@@ -122,7 +122,6 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             Provide your response in JSON format matching this structure:
             {"calories": 150.0, "protein": 10.0, "carbs": 12.0, "fat": 3.0, "suitable": true, "advice": "Concise advice in Traditional Chinese.", "reasoning": "Short estimate basis in Traditional Chinese."}
             Output ONLY one raw JSON object. Do not use markdown fences. Keep advice and reasoning each under 40 Traditional Chinese characters.
-            If the food is chocolate, candy, dessert, or a snack and no weight is given, assume one common serving around 30g. Do not output zero carbs or zero fat for chocolate.
         """.trimIndent()
 
         val reply = generateReply(prompt)

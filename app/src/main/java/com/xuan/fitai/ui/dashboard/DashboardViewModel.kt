@@ -9,6 +9,7 @@ import com.xuan.fitai.data.model.ModelLoadState
 import com.xuan.fitai.data.model.UserProfile
 import com.xuan.fitai.data.repository.MealRepository
 import com.xuan.fitai.data.repository.UserRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -30,24 +31,48 @@ class DashboardViewModel(
     private val _isAiAdviceGenerating = MutableStateFlow(false)
     val isAiAdviceGenerating: StateFlow<Boolean> = _isAiAdviceGenerating.asStateFlow()
 
+    private val dashboardActive = MutableStateFlow(false)
+
     val loadedModelName: StateFlow<String?> = gemmaHelper.loadedModelName
+
+    private data class DashboardAdviceInput(
+        val profile: UserProfile,
+        val meals: List<Meal>,
+        val loadState: ModelLoadState,
+        val isActive: Boolean
+    )
 
     init {
         // Automatically generate advice when profile, meals, or AI load state updates
         viewModelScope.launch {
-            combine(userProfile, todayMeals, gemmaHelper.loadState) { profile, meals, loadState ->
-                android.util.Log.d("FitAI_VM", "DashboardViewModel init flow combined: loadState=$loadState")
-                Pair(profile, meals)
-            }.collect { (profile, meals) ->
+            combine(userProfile, todayMeals, gemmaHelper.loadState, dashboardActive) { profile, meals, loadState, isActive ->
+                android.util.Log.d("FitAI_VM", "DashboardViewModel init flow combined: loadState=$loadState, active=$isActive")
+                DashboardAdviceInput(profile, meals, loadState, isActive)
+            }.collectLatest { input ->
+                if (!input.isActive) {
+                    _isAiAdviceGenerating.value = false
+                    android.util.Log.d("FitAI_VM", "DashboardViewModel skipped advice: screen inactive")
+                    return@collectLatest
+                }
                 android.util.Log.d("FitAI_VM", "DashboardViewModel collecting flow: calling generateDailyAdvice")
-                generateDailyAdvice(profile, meals)
+                generateDailyAdvice(input.profile, input.meals, input.loadState)
             }
         }
     }
 
-    private suspend fun generateDailyAdvice(profile: UserProfile, meals: List<Meal>) {
-        android.util.Log.d("FitAI_VM", "generateDailyAdvice started: loadState=${gemmaHelper.loadState.value}")
-        if (gemmaHelper.loadState.value != ModelLoadState.Loaded) {
+    fun setAdviceGenerationActive(active: Boolean) {
+        dashboardActive.value = active
+    }
+
+    private suspend fun generateDailyAdvice(profile: UserProfile, meals: List<Meal>, loadState: ModelLoadState) {
+        android.util.Log.d("FitAI_VM", "generateDailyAdvice started: loadState=$loadState")
+        if (loadState == ModelLoadState.Loading) {
+            _isAiAdviceGenerating.value = true
+            android.util.Log.d("FitAI_VM", "generateDailyAdvice skipped: model loading")
+            return
+        }
+
+        if (loadState != ModelLoadState.Loaded) {
             _isAiAdviceGenerating.value = false
             _aiAdvice.value = "⚠️ 本地 Gemma AI 模型尚未載入。請先至「模型設定」頁面下載或載入模型，以取得精準健康建議。"
             android.util.Log.d("FitAI_VM", "generateDailyAdvice returned early: model not loaded")
@@ -72,6 +97,9 @@ class DashboardViewModel(
             val reply = gemmaHelper.generateReply(prompt)
             android.util.Log.d("FitAI_VM", "generateDailyAdvice: generateReply returned, length=${reply.length}")
             _aiAdvice.value = reply
+        } catch (e: CancellationException) {
+            android.util.Log.d("FitAI_VM", "generateDailyAdvice cancelled")
+            throw e
         } catch (e: Exception) {
             android.util.Log.e("FitAI_VM", "generateDailyAdvice failed", e)
             _aiAdvice.value = "今日健康建議產生失敗: ${e.localizedMessage}"

@@ -46,6 +46,13 @@ fun DashboardScreen(
 
     var showManualAddDialog by remember { mutableStateOf(false) }
 
+    DisposableEffect(viewModel) {
+        viewModel.setAdviceGenerationActive(true)
+        onDispose {
+            viewModel.setAdviceGenerationActive(false)
+        }
+    }
+
     val consumedCalories = meals.sumOf { it.calories.toDouble() }.toFloat()
     val remainingCalories = (profile.targetCalories - consumedCalories).coerceAtLeast(0f)
     
