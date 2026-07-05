@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -30,7 +31,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.xuan.fitai.camera.CameraController
 import com.xuan.fitai.camera.CameraScreen
+import com.xuan.fitai.ai.GemmaOutputParser
 import com.xuan.fitai.data.model.ModelLoadState
+import com.xuan.fitai.ui.components.ThinkingContent
 import com.xuan.fitai.util.PermissionUtil
 import java.util.concurrent.Executors
 
@@ -261,12 +264,13 @@ fun FoodScannerScreen(
                         }
                     }
                     is ScannerUiState.EditDetails -> {
-                        var foodName by remember { mutableStateOf(state.detectedLabel) }
+                        var foodName by remember { mutableStateOf(GemmaOutputParser.extractContent(state.detectedLabel)) }
                         var portion by remember { mutableStateOf("1份") }
 
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
                                 .padding(24.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
@@ -290,11 +294,12 @@ fun FoodScannerScreen(
                                         )
                                     )
                                 }
-                                Text(
-                                    text = "預測結果: ${state.detectedLabel}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.tertiary
+                                ThinkingContent(
+                                    rawText = state.detectedLabel,
+                                    contentTextStyle = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.tertiary
+                                    )
                                 )
                             } else {
                                 Text(
@@ -387,7 +392,7 @@ fun FoodScannerScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
 
-                            Spacer(modifier = Modifier.weight(1f))
+                            Spacer(modifier = Modifier.height(24.dp))
 
                             Button(
                                 onClick = { viewModel.analyzeWithGemma(foodName, portion) },
@@ -420,6 +425,7 @@ fun FoodScannerScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
                                 .padding(24.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
@@ -429,6 +435,11 @@ fun FoodScannerScreen(
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.align(Alignment.CenterHorizontally)
                             )
+
+                            // Show Gemma's thinking process if available
+                            if (!analysis.thinking.isNullOrBlank()) {
+                                ThinkingContent(rawText = "<|channel>thought\n${analysis.thinking}<channel|>")
+                            }
 
                             // Stats Grid Card
                             Card(
@@ -488,9 +499,23 @@ fun FoodScannerScreen(
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Text("Gemma 健康飲食建議：", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                                     Spacer(modifier = Modifier.height(4.dp))
-                                    Text(text = analysis.advice, style = MaterialTheme.typography.bodyMedium)
+                                    ThinkingContent(rawText = analysis.advice)
                                 }
                             }
+
+                            if (!analysis.reasoning.isNullOrBlank()) {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                                ) {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        Text("💡 AI 估算依據：", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        ThinkingContent(rawText = analysis.reasoning)
+                                    }
+                                }
+                            }
+
 
                             // Important Warning Banner (Required by Spec)
                             Card(
@@ -515,7 +540,7 @@ fun FoodScannerScreen(
                                 }
                             }
 
-                            Spacer(modifier = Modifier.weight(1f))
+                            Spacer(modifier = Modifier.height(24.dp))
 
                             Button(
                                 onClick = {

@@ -171,7 +171,8 @@ class MockGemmaLocalHelper : GemmaLocalHelper {
                     fat = fat,
                     isSuitable = suitable,
                     advice = "這是針對「${foodName}」的本地 AI 營養分析。${foodName} 能提供熱量與營養素，若您的目標是「${goal}」，建議" +
-                            if (goal == "減肥") "控制每日總熱量，並將其納入飲食計畫中。" else "多搭配充足的蛋白質，以利肌肉生長與修復。"
+                            if (goal == "減肥") "控制每日總熱量，並將其納入飲食計畫中。" else "多搭配充足的蛋白質，以利肌肉生長與修復。",
+                    reasoning = "模擬本地 AI 推理：基於「${foodName}」的歷史配方數據，估算出單份約含熱量 ${calories.toInt()}大卡、蛋白質 ${protein.toInt()}克、碳水化合物 ${carbs.toInt()}克與脂肪 ${fat.toInt()}克。"
                 )
             }
         }

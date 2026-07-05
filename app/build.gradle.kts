@@ -100,7 +100,7 @@ dependencies {
   implementation(libs.androidx.camera.view)
 
   // MediaPipe
-  implementation(libs.mediapipe.tasks.genai)
+  implementation("com.google.ai.edge.litertlm:litertlm-android:latest.release")
   implementation(libs.mediapipe.tasks.vision)
 }
 

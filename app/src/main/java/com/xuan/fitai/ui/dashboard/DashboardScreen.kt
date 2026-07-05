@@ -1,5 +1,9 @@
 package com.xuan.fitai.ui.dashboard
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -19,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.xuan.fitai.data.model.Meal
 import com.xuan.fitai.data.model.UserProfile
 import com.xuan.fitai.ui.components.NutritionProgressCard
+import com.xuan.fitai.ui.components.ThinkingContent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -242,7 +247,7 @@ fun DashboardScreen(
                             )
                         }
                     } else {
-                        Text(text = advice, style = MaterialTheme.typography.bodyMedium)
+                        ThinkingContent(rawText = advice)
                     }
                 }
             }
@@ -349,6 +354,7 @@ fun DashboardScreen(
         var fatVal by remember { mutableStateOf("") }
         var isAiAnalyzing by remember { mutableStateOf(false) }
         var aiErrorMsg by remember { mutableStateOf<String?>(null) }
+        var aiReasoning by remember { mutableStateOf("") }
 
         AlertDialog(
             onDismissRequest = { showManualAddDialog = false },
@@ -356,7 +362,9 @@ fun DashboardScreen(
             text = {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
                 ) {
                     OutlinedTextField(
                         value = mealName,
@@ -371,6 +379,7 @@ fun DashboardScreen(
                             if (mealName.isNotBlank()) {
                                 isAiAnalyzing = true
                                 aiErrorMsg = null
+                                aiReasoning = ""
                                 coroutineScope.launch {
                                     val result = viewModel.askAiForMealSuggestion(mealName)
                                     isAiAnalyzing = false
@@ -379,6 +388,7 @@ fun DashboardScreen(
                                         proteinVal = result.protein.toInt().toString()
                                         carbsVal = result.carbs.toInt().toString()
                                         fatVal = result.fat.toInt().toString()
+                                        aiReasoning = result.reasoning
                                     } else {
                                         aiErrorMsg = "⚠️ 估算失敗！請確認已在「模型設定」頁面載入 Gemma 模型。"
                                     }
@@ -422,7 +432,32 @@ fun DashboardScreen(
                         )
                     }
 
+                    if (aiReasoning.isNotBlank()) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = "💡 AI 估算依據：",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = aiReasoning,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
                     Divider(modifier = Modifier.padding(vertical = 4.dp))
+
 
                     OutlinedTextField(
                         value = caloriesVal,
@@ -479,3 +514,4 @@ fun DashboardScreen(
         )
     }
 }
+

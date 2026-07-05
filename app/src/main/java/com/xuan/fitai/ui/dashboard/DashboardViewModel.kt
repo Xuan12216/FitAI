@@ -35,18 +35,22 @@ class DashboardViewModel(
     init {
         // Automatically generate advice when profile, meals, or AI load state updates
         viewModelScope.launch {
-            combine(userProfile, todayMeals, gemmaHelper.loadState) { profile, meals, _ ->
+            combine(userProfile, todayMeals, gemmaHelper.loadState) { profile, meals, loadState ->
+                android.util.Log.d("FitAI_VM", "DashboardViewModel init flow combined: loadState=$loadState")
                 Pair(profile, meals)
             }.collect { (profile, meals) ->
+                android.util.Log.d("FitAI_VM", "DashboardViewModel collecting flow: calling generateDailyAdvice")
                 generateDailyAdvice(profile, meals)
             }
         }
     }
 
     private suspend fun generateDailyAdvice(profile: UserProfile, meals: List<Meal>) {
+        android.util.Log.d("FitAI_VM", "generateDailyAdvice started: loadState=${gemmaHelper.loadState.value}")
         if (gemmaHelper.loadState.value != ModelLoadState.Loaded) {
             _isAiAdviceGenerating.value = false
             _aiAdvice.value = "⚠️ 本地 Gemma AI 模型尚未載入。請先至「模型設定」頁面下載或載入模型，以取得精準健康建議。"
+            android.util.Log.d("FitAI_VM", "generateDailyAdvice returned early: model not loaded")
             return
         }
 
@@ -64,11 +68,16 @@ class DashboardViewModel(
 
         try {
             _isAiAdviceGenerating.value = true
-            _aiAdvice.value = gemmaHelper.generateReply(prompt)
+            android.util.Log.d("FitAI_VM", "generateDailyAdvice: calling generateReply")
+            val reply = gemmaHelper.generateReply(prompt)
+            android.util.Log.d("FitAI_VM", "generateDailyAdvice: generateReply returned, length=${reply.length}")
+            _aiAdvice.value = reply
         } catch (e: Exception) {
+            android.util.Log.e("FitAI_VM", "generateDailyAdvice failed", e)
             _aiAdvice.value = "今日健康建議產生失敗: ${e.localizedMessage}"
         } finally {
             _isAiAdviceGenerating.value = false
+            android.util.Log.d("FitAI_VM", "generateDailyAdvice finished")
         }
     }
 

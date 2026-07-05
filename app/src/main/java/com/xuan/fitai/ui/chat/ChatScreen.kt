@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.xuan.fitai.data.model.ModelLoadState
+import com.xuan.fitai.ui.components.ThinkingContent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -137,11 +138,15 @@ fun ChatScreen(
                                     .padding(12.dp)
                                     .widthIn(max = 280.dp)
                             ) {
-                                Text(
-                                    text = msg.content,
-                                    color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
+                                if (isUser) {
+                                    Text(
+                                        text = msg.content,
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                } else {
+                                    ThinkingContent(rawText = msg.content)
+                                }
                             }
                         }
                     }
@@ -213,3 +218,4 @@ fun ChatScreen(
         }
     }
 }
+

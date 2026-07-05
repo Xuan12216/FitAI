@@ -32,6 +32,31 @@ class ModelSetupViewModel(
     val classifierLoadState = modelManager.classifierHelper.loadState
     val loadedModelName = modelManager.gemmaHelper.loadedModelName
 
+    // Configuration flows
+    val maxTokens: StateFlow<Int> = userPreferenceStore.maxTokensFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 4000)
+
+    val topK: StateFlow<Int> = userPreferenceStore.topKFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 64)
+
+    val topP: StateFlow<Float> = userPreferenceStore.topPFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.95f)
+
+    val temperature: StateFlow<Float> = userPreferenceStore.temperatureFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1.0f)
+
+    val useGpu: StateFlow<Boolean> = userPreferenceStore.useGpuFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val enableThinking: StateFlow<Boolean> = userPreferenceStore.enableThinkingFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val enableSpeculative: StateFlow<Boolean> = userPreferenceStore.enableSpeculativeFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val systemPrompt: StateFlow<String> = userPreferenceStore.systemPromptFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "你是一個專業的健康與營養顧問。請用繁體中文回答。")
+
     init {
         viewModelScope.launch {
             modelManager.initializeDefaultModels()
@@ -80,6 +105,31 @@ class ModelSetupViewModel(
             if (model != null) {
                 rememberSelectedModel(model)
                 modelManager.loadModel(model)
+            }
+        }
+    }
+
+    fun saveModelConfig(
+        maxTokens: Int,
+        topK: Int,
+        topP: Float,
+        temperature: Float,
+        useGpu: Boolean,
+        enableThinking: Boolean,
+        enableSpeculative: Boolean,
+        systemPrompt: String
+    ) {
+        viewModelScope.launch {
+            userPreferenceStore.saveModelConfig(
+                maxTokens, topK, topP, temperature, useGpu, enableThinking, enableSpeculative, systemPrompt
+            )
+            // Reload active LLM model to apply config immediately if loaded
+            val selectedLlmModelId = userPreferenceStore.selectedLlmModelIdFlow.first()
+            if (selectedLlmModelId != null) {
+                val model = modelRepository.getModelById(selectedLlmModelId)
+                if (model != null && model.isDownloaded) {
+                    modelManager.loadModel(model)
+                }
             }
         }
     }

@@ -26,6 +26,16 @@ class UserPreferenceStore(private val context: Context) {
         val KEY_SELECTED_LLM_MODEL_ID = stringPreferencesKey("selected_llm_model_id")
         val KEY_SELECTED_CLASSIFIER_PATH = stringPreferencesKey("selected_classifier_path")
         val KEY_HF_TOKEN = stringPreferencesKey("hf_token")
+
+        // Local AI model configuration keys
+        val KEY_MAX_TOKENS = intPreferencesKey("max_tokens")
+        val KEY_TOP_K = intPreferencesKey("top_k")
+        val KEY_TOP_P = floatPreferencesKey("top_p")
+        val KEY_TEMPERATURE = floatPreferencesKey("temperature")
+        val KEY_USE_GPU = booleanPreferencesKey("use_gpu")
+        val KEY_ENABLE_THINKING = booleanPreferencesKey("enable_thinking")
+        val KEY_ENABLE_SPECULATIVE = booleanPreferencesKey("enable_speculative")
+        val KEY_SYSTEM_PROMPT = stringPreferencesKey("system_prompt")
     }
 
     val userProfileFlow: Flow<UserProfile> = context.dataStore.data.map { preferences ->
@@ -59,6 +69,32 @@ class UserPreferenceStore(private val context: Context) {
 
     val hfTokenFlow: Flow<String?> = context.dataStore.data.map { preferences ->
         preferences[KEY_HF_TOKEN]
+    }
+
+    // Config flows
+    val maxTokensFlow: Flow<Int> = context.dataStore.data.map { preferences ->
+        preferences[KEY_MAX_TOKENS] ?: 4000
+    }
+    val topKFlow: Flow<Int> = context.dataStore.data.map { preferences ->
+        preferences[KEY_TOP_K] ?: 64
+    }
+    val topPFlow: Flow<Float> = context.dataStore.data.map { preferences ->
+        preferences[KEY_TOP_P] ?: 0.95f
+    }
+    val temperatureFlow: Flow<Float> = context.dataStore.data.map { preferences ->
+        preferences[KEY_TEMPERATURE] ?: 1.0f
+    }
+    val useGpuFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[KEY_USE_GPU] ?: false
+    }
+    val enableThinkingFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[KEY_ENABLE_THINKING] ?: false
+    }
+    val enableSpeculativeFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[KEY_ENABLE_SPECULATIVE] ?: false
+    }
+    val systemPromptFlow: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[KEY_SYSTEM_PROMPT] ?: "你是一個專業的健康與營養顧問。請用繁體中文回答。"
     }
 
     suspend fun saveUserProfile(profile: UserProfile) {
@@ -108,6 +144,28 @@ class UserPreferenceStore(private val context: Context) {
     suspend fun resetOnboarding() {
         context.dataStore.edit { preferences ->
             preferences[KEY_IS_ONBOARDING_COMPLETED] = false
+        }
+    }
+
+    suspend fun saveModelConfig(
+        maxTokens: Int,
+        topK: Int,
+        topP: Float,
+        temperature: Float,
+        useGpu: Boolean,
+        enableThinking: Boolean,
+        enableSpeculative: Boolean,
+        systemPrompt: String
+    ) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_MAX_TOKENS] = maxTokens
+            preferences[KEY_TOP_K] = topK
+            preferences[KEY_TOP_P] = topP
+            preferences[KEY_TEMPERATURE] = temperature
+            preferences[KEY_USE_GPU] = useGpu
+            preferences[KEY_ENABLE_THINKING] = enableThinking
+            preferences[KEY_ENABLE_SPECULATIVE] = enableSpeculative
+            preferences[KEY_SYSTEM_PROMPT] = systemPrompt
         }
     }
 }

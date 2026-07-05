@@ -21,5 +21,7 @@ data class GemmaFoodAnalysis(
     val carbs: Float,
     val fat: Float,
     val isSuitable: Boolean,
-    val advice: String
+    val advice: String,
+    val reasoning: String = "",
+    val thinking: String? = null
 )
