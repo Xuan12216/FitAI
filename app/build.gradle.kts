@@ -38,6 +38,9 @@ android {
       resources {
         excludes += "/META-INF/{AL2.0,LGPL2.1}"
       }
+      jniLibs {
+        useLegacyPackaging = false
+      }
     }
 }
 
@@ -100,8 +103,7 @@ dependencies {
   implementation(libs.androidx.camera.view)
 
   // MediaPipe
-  implementation("com.google.ai.edge.litertlm:litertlm-android:latest.release")
+  implementation(libs.mediapipe.tasks.genai)
   implementation(libs.mediapipe.tasks.vision)
 }
-
 

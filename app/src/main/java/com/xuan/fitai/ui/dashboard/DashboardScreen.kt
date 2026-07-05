@@ -66,7 +66,7 @@ fun DashboardScreen(
                 title = { Text("FitAI 健康儀表板", fontWeight = FontWeight.Bold) },
                 actions = {
                     IconButton(onClick = onResetOnboarding) {
-                        Icon(imageVector = Icons.Default.Refresh, contentDescription = "重設基本資料")
+                        Icon(imageVector = Icons.Default.Edit, contentDescription = "編輯基本資料")
                     }
                 }
             )
