@@ -38,7 +38,9 @@ fun WorkoutScreen(
     val profile by viewModel.userProfile.collectAsState()
     val plans by viewModel.workoutPlans.collectAsState()
     val isGenerating by viewModel.isGenerating.collectAsState()
+    val isSummarizing by viewModel.isSummarizing.collectAsState()
     val generationThinking by viewModel.generationThinking.collectAsState()
+    val workoutSummary by viewModel.workoutSummary.collectAsState()
     val healthData by viewModel.healthData.collectAsState()
     val hasHealthPermissions by viewModel.hasHealthPermissions.collectAsState()
 
@@ -175,26 +177,15 @@ fun WorkoutScreen(
                         )
                     }
 
-                    // Display Gemma's generation thinking process if available
-                    if (!generationThinking.isNullOrBlank()) {
+
+
+                    // Show card once summary starts streaming (second AI call)
+                    if (!workoutSummary.isNullOrBlank() || isSummarizing) {
                         item {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Text(
-                                        text = "💡 AI 圖示設計推薦依據：",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    ThinkingContent(
-                                        rawText = "<|channel>thought\n$generationThinking<channel|>",
-                                        isGenerating = isGenerating
-                                    )
-                                }
-                            }
+                            AISummaryCard(
+                                summary = workoutSummary,
+                                isSummarizing = isSummarizing
+                            )
                         }
                     }
 
@@ -708,6 +699,53 @@ private fun WorkoutPlanRow(
         }
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+}
+
+@Composable
+private fun AISummaryCard(
+    summary: String?,
+    isSummarizing: Boolean
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Face,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "AI 計畫摘要",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            // Identical to DashboardScreen:
+            //   ThinkingContent(rawText = advice, isGenerating = isAiAdviceGenerating)
+            // ThinkingContent handles thinking/content split — no flash issue
+            if (!summary.isNullOrBlank()) {
+                ThinkingContent(
+                    rawText = summary,
+                    isGenerating = isSummarizing
+                )
+            } else if (isSummarizing) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Text(
+                        text = "AI 摘要生成中，請稍候...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
 }
 
 private fun currentDayOfWeek(): String {

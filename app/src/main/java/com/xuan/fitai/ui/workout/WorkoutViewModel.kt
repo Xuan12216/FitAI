@@ -32,8 +32,14 @@ class WorkoutViewModel(
     private val _isGenerating = MutableStateFlow(false)
     val isGenerating: StateFlow<Boolean> = _isGenerating.asStateFlow()
 
+    private val _isSummarizing = MutableStateFlow(false)
+    val isSummarizing: StateFlow<Boolean> = _isSummarizing.asStateFlow()
+
     private val _generationThinking = MutableStateFlow<String?>(null)
     val generationThinking: StateFlow<String?> = _generationThinking.asStateFlow()
+
+    private val _workoutSummary = MutableStateFlow<String?>(null)
+    val workoutSummary: StateFlow<String?> = _workoutSummary.asStateFlow()
 
     private val _healthData = MutableStateFlow<HealthData?>(null)
     val healthData: StateFlow<HealthData?> = _healthData.asStateFlow()
@@ -56,6 +62,12 @@ class WorkoutViewModel(
         viewModelScope.launch {
             userPreferenceStore.workoutPlanThinkingFlow.collect { thinking ->
                 _generationThinking.value = thinking
+            }
+        }
+        // Load persisted AI summary
+        viewModelScope.launch {
+            userPreferenceStore.workoutSummaryFlow.collect { summary ->
+                _workoutSummary.value = summary
             }
         }
         checkHealthConnectStatus()
@@ -160,6 +172,8 @@ class WorkoutViewModel(
     fun regeneratePlan() {
         viewModelScope.launch {
             userPreferenceStore.saveWorkoutPlanThinking("")
+            userPreferenceStore.saveWorkoutSummary("")
+            _workoutSummary.value = null
             generateDefaultWorkoutPlan()
         }
     }
@@ -217,6 +231,8 @@ class WorkoutViewModel(
                                 )
                             )
                         }
+                        // Generate a streaming AI summary of the plan
+                        generateWorkoutSummary(jsonArrayStr)
                     }
                 } else {
                     // Fallback to default if JSON extraction fails
@@ -226,9 +242,54 @@ class WorkoutViewModel(
             } catch (e: Exception) {
                 android.util.Log.e("FitAI_Workout", "AI generation failed", e)
                 userPreferenceStore.saveWorkoutPlanThinking("")
+                userPreferenceStore.saveWorkoutSummary("")
                 generateDefaultWorkoutPlan()
             } finally {
                 _isGenerating.value = false
+            }
+        }
+    }
+
+    private fun generateWorkoutSummary(planJson: String) {
+        viewModelScope.launch {
+            _isSummarizing.value = true
+            _workoutSummary.value = ""
+            try {
+                val profile = userProfile.value
+                val summaryPrompt = """
+                    Based on the following workout plan JSON, write a concise and motivating summary in Traditional Chinese (繁體中文) for the user.
+                    The summary should:
+                    - Be 3-5 sentences
+                    - Highlight the key training focus and muscle groups targeted
+                    - Mention the training frequency and volume
+                    - Include a motivational closing statement
+                    - Use a friendly, encouraging tone
+                    - Do NOT include any JSON or code, only plain prose text
+
+                    User Goal: ${profile.goal}
+                    Workout Plan JSON:
+                    $planJson
+
+                    Write the summary now:
+                """.trimIndent()
+
+                var rawText = ""
+                gemmaHelper.generateReplyFlow(summaryPrompt).collect { token ->
+                    rawText += token
+                    // Store raw text directly — identical to DashboardViewModel:
+                    //   currentText += token; _aiAdvice.value = currentText
+                    // ThinkingContent handles thinking/content split itself,
+                    // so there's no flash of thinking text in the content area
+                    _workoutSummary.value = rawText
+                }
+
+                // Persist raw text so ThinkingContent re-parses correctly on next visit
+                _workoutSummary.value = rawText
+                userPreferenceStore.saveWorkoutSummary(rawText)
+            } catch (e: Exception) {
+                android.util.Log.e("FitAI_Workout", "Summary generation failed", e)
+            } finally {
+                _isSummarizing.value = false
             }
         }
     }

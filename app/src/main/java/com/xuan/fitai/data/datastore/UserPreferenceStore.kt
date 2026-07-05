@@ -37,6 +37,7 @@ class UserPreferenceStore(private val context: Context) {
         val KEY_ENABLE_SPECULATIVE = booleanPreferencesKey("enable_speculative")
         val KEY_SYSTEM_PROMPT = stringPreferencesKey("system_prompt")
         val KEY_WORKOUT_PLAN_THINKING = stringPreferencesKey("workout_plan_thinking")
+        val KEY_WORKOUT_SUMMARY = stringPreferencesKey("workout_summary")
     }
 
     val userProfileFlow: Flow<UserProfile> = context.dataStore.data.map { preferences ->
@@ -102,9 +103,19 @@ class UserPreferenceStore(private val context: Context) {
         preferences[KEY_WORKOUT_PLAN_THINKING]
     }
 
+    val workoutSummaryFlow: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[KEY_WORKOUT_SUMMARY]
+    }
+
     suspend fun saveWorkoutPlanThinking(thinking: String) {
         context.dataStore.edit { preferences ->
             preferences[KEY_WORKOUT_PLAN_THINKING] = thinking
+        }
+    }
+
+    suspend fun saveWorkoutSummary(summary: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_WORKOUT_SUMMARY] = summary
         }
     }
 
