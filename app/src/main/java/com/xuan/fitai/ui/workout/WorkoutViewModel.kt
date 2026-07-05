@@ -19,7 +19,8 @@ class WorkoutViewModel(
     private val userRepository: UserRepository,
     private val workoutRepository: WorkoutRepository,
     private val gemmaHelper: GemmaLocalHelper,
-    private val healthConnectHelper: HealthConnectHelper
+    private val healthConnectHelper: HealthConnectHelper,
+    private val userPreferenceStore: com.xuan.fitai.data.datastore.UserPreferenceStore
 ) : ViewModel() {
 
     val userProfile: StateFlow<UserProfile> = userRepository.userProfile
@@ -46,10 +47,15 @@ class WorkoutViewModel(
     init {
         // Auto-generate default plan if DB is empty
         viewModelScope.launch {
-            workoutPlans.collect { list ->
-                if (list.isEmpty()) {
-                    generateDefaultWorkoutPlan()
-                }
+            val currentPlans = workoutRepository.allWorkoutPlans.first()
+            if (currentPlans.isEmpty()) {
+                generateDefaultWorkoutPlan()
+            }
+        }
+        // Load persisted thinking process text from Datastore
+        viewModelScope.launch {
+            userPreferenceStore.workoutPlanThinkingFlow.collect { thinking ->
+                _generationThinking.value = thinking
             }
         }
         checkHealthConnectStatus()
@@ -153,6 +159,7 @@ class WorkoutViewModel(
 
     fun regeneratePlan() {
         viewModelScope.launch {
+            userPreferenceStore.saveWorkoutPlanThinking("")
             generateDefaultWorkoutPlan()
         }
     }
@@ -191,6 +198,7 @@ class WorkoutViewModel(
                 
                 val thinking = GemmaOutputParser.extractThinking(currentText)
                 _generationThinking.value = thinking
+                userPreferenceStore.saveWorkoutPlanThinking(thinking ?: "")
 
                 val jsonArrayStr = GemmaOutputParser.extractJsonArray(currentText)
                 if (jsonArrayStr.isNotBlank()) {
@@ -212,10 +220,12 @@ class WorkoutViewModel(
                     }
                 } else {
                     // Fallback to default if JSON extraction fails
+                    userPreferenceStore.saveWorkoutPlanThinking("")
                     generateDefaultWorkoutPlan()
                 }
             } catch (e: Exception) {
                 android.util.Log.e("FitAI_Workout", "AI generation failed", e)
+                userPreferenceStore.saveWorkoutPlanThinking("")
                 generateDefaultWorkoutPlan()
             } finally {
                 _isGenerating.value = false
@@ -227,12 +237,13 @@ class WorkoutViewModel(
         private val userRepository: UserRepository,
         private val workoutRepository: WorkoutRepository,
         private val gemmaHelper: GemmaLocalHelper,
-        private val healthConnectHelper: HealthConnectHelper
+        private val healthConnectHelper: HealthConnectHelper,
+        private val userPreferenceStore: com.xuan.fitai.data.datastore.UserPreferenceStore
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(WorkoutViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return WorkoutViewModel(userRepository, workoutRepository, gemmaHelper, healthConnectHelper) as T
+                return WorkoutViewModel(userRepository, workoutRepository, gemmaHelper, healthConnectHelper, userPreferenceStore) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

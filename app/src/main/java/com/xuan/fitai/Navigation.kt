@@ -124,7 +124,8 @@ fun MainNavigation(modifier: Modifier = Modifier) {
                     app.userRepository,
                     app.workoutRepository,
                     app.gemmaHelper,
-                    app.healthConnectHelper
+                    app.healthConnectHelper,
+                    app.userPreferenceStore
                 )
             )
             WorkoutScreen(
