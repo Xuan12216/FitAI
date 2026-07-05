@@ -115,7 +115,7 @@ fun WorkoutScreen(
         }
     ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            if (isGenerating) {
+            if (isGenerating && generationThinking.isNullOrBlank()) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -142,6 +142,27 @@ fun WorkoutScreen(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 80.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    if (isGenerating) {
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    Text(
+                                        text = "AI 運動計畫排程中，請稍候...",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                        }
+                    }
                     item {
                         WorkoutPlanHeader(
                             goal = profile.goal,
@@ -168,7 +189,10 @@ fun WorkoutScreen(
                                         fontWeight = FontWeight.Bold
                                     )
                                     Spacer(modifier = Modifier.height(6.dp))
-                                    ThinkingContent(rawText = "<|channel>thought\n$generationThinking<channel|>")
+                                    ThinkingContent(
+                                        rawText = "<|channel>thought\n$generationThinking<channel|>",
+                                        isGenerating = isGenerating
+                                    )
                                 }
                             }
                         }

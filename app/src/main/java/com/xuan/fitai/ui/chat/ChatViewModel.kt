@@ -27,13 +27,27 @@ class ChatViewModel(
     val todayMeals = mealRepository.getMealsForDay(System.currentTimeMillis())
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val chatMessages: StateFlow<List<ChatMessage>> = chatDao.getAllMessages()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _streamingMessage = MutableStateFlow<ChatMessage?>(null)
+
+    val chatMessages: StateFlow<List<ChatMessage>> = combine(
+        chatDao.getAllMessages(),
+        _streamingMessage
+    ) { dbMessages, streamingMsg ->
+        if (streamingMsg != null) {
+            dbMessages + streamingMsg
+        } else {
+            dbMessages
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val gemmaLoadState = gemmaHelper.loadState
 
     private val _isGenerating = MutableStateFlow(false)
     val isGenerating: StateFlow<Boolean> = _isGenerating.asStateFlow()
+
+    val isThinking: StateFlow<Boolean> = combine(_isGenerating, _streamingMessage) { generating, streaming ->
+        generating && streaming == null
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     private val _errorMsg = MutableStateFlow<String?>(null)
     val errorMsg: StateFlow<String?> = _errorMsg.asStateFlow()
@@ -72,11 +86,22 @@ class ChatViewModel(
                     userMessage = userMessage
                 )
 
-                val reply = gemmaHelper.generateReply(fullPrompt)
-                chatDao.insertMessage(ChatMessage(role = "assistant", content = reply))
+                var currentText = ""
+                gemmaHelper.generateReplyFlow(fullPrompt).collect { token ->
+                    if (_streamingMessage.value == null) {
+                        _streamingMessage.value = ChatMessage(role = "assistant", content = "")
+                    }
+                    currentText += token
+                    _streamingMessage.value = ChatMessage(role = "assistant", content = currentText)
+                }
+
+                if (currentText.isNotEmpty()) {
+                    chatDao.insertMessage(ChatMessage(role = "assistant", content = currentText))
+                }
             } catch (e: Exception) {
                 _errorMsg.value = "Gemma 回覆失敗: ${e.localizedMessage}"
             } finally {
+                _streamingMessage.value = null
                 _isGenerating.value = false
             }
         }

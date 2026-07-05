@@ -182,11 +182,17 @@ class WorkoutViewModel(
                     Ensure you output ONLY the raw JSON array string.
                 """.trimIndent()
 
-                val reply = gemmaHelper.generateReply(prompt)
-                val thinking = GemmaOutputParser.extractThinking(reply)
+                var currentText = ""
+                gemmaHelper.generateReplyFlow(prompt).collect { token ->
+                    currentText += token
+                    val thinking = GemmaOutputParser.extractThinking(currentText)
+                    _generationThinking.value = thinking
+                }
+                
+                val thinking = GemmaOutputParser.extractThinking(currentText)
                 _generationThinking.value = thinking
 
-                val jsonArrayStr = GemmaOutputParser.extractJsonArray(reply)
+                val jsonArrayStr = GemmaOutputParser.extractJsonArray(currentText)
                 if (jsonArrayStr.isNotBlank()) {
                     val jsonArray = JSONArray(jsonArrayStr)
                     if (jsonArray.length() > 0) {

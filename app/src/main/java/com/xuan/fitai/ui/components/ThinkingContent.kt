@@ -43,7 +43,8 @@ fun ThinkingContent(
     rawText: String,
     modifier: Modifier = Modifier,
     contentTextStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium,
-    cardCornerRadius: Dp = 8.dp
+    cardCornerRadius: Dp = 8.dp,
+    isGenerating: Boolean = false
 ) {
     val regex = Regex("<\\|?channel\\|?>([a-zA-Z0-9_]*)")
     val matches = regex.findAll(rawText).toList()
@@ -81,6 +82,10 @@ fun ThinkingContent(
         // Collapsible thinking card
         if (!thinkingText.isNullOrBlank()) {
             var isExpanded by remember { mutableStateOf(false) }
+
+            LaunchedEffect(isGenerating) {
+                isExpanded = isGenerating
+            }
 
             // Animate arrow rotation: 0° when collapsed, 180° when expanded
             val arrowRotation by animateFloatAsState(

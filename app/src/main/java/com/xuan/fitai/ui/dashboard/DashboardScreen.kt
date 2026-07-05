@@ -241,7 +241,11 @@ fun DashboardScreen(
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
-                    if (isAiAdviceGenerating) {
+                    ThinkingContent(
+                        rawText = advice,
+                        isGenerating = isAiAdviceGenerating
+                    )
+                    if (isAiAdviceGenerating && advice.isBlank()) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -254,8 +258,6 @@ fun DashboardScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    } else {
-                        ThinkingContent(rawText = advice)
                     }
                 }
             }

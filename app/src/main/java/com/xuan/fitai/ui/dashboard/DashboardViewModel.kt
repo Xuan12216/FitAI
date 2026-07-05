@@ -93,10 +93,12 @@ class DashboardViewModel(
 
         try {
             _isAiAdviceGenerating.value = true
-            android.util.Log.d("FitAI_VM", "generateDailyAdvice: calling generateReply")
-            val reply = gemmaHelper.generateReply(prompt)
-            android.util.Log.d("FitAI_VM", "generateDailyAdvice: generateReply returned, length=${reply.length}")
-            _aiAdvice.value = reply
+            android.util.Log.d("FitAI_VM", "generateDailyAdvice: calling generateReplyFlow")
+            var currentText = ""
+            gemmaHelper.generateReplyFlow(prompt).collect { token ->
+                currentText += token
+                _aiAdvice.value = currentText
+            }
         } catch (e: CancellationException) {
             android.util.Log.d("FitAI_VM", "generateDailyAdvice cancelled")
             throw e

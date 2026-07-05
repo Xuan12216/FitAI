@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.runBlocking
@@ -109,6 +110,18 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             modelMutex.unlock()
         }
     }
+
+    override fun generateReplyFlow(prompt: String): kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.flow {
+        modelMutex.lock()
+        try {
+            val currentConversation = conversation ?: throw IllegalStateException("錯誤：Gemma 模型尚未載入。")
+            currentConversation.sendMessageAsync(prompt).collect { token ->
+                emit(token.toString())
+            }
+        } finally {
+            modelMutex.unlock()
+        }
+    }.flowOn(Dispatchers.IO)
 
     override suspend fun analyzeFood(foodName: String, portion: String, goal: String): GemmaFoodAnalysis {
         val prompt = """

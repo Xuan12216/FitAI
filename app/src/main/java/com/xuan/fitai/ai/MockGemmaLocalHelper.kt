@@ -80,6 +80,18 @@ class MockGemmaLocalHelper : GemmaLocalHelper {
         }
     }
 
+    override fun generateReplyFlow(prompt: String): kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.flow {
+        if (_loadState.value != ModelLoadState.Loaded) {
+            emit("錯誤：Gemma 模型尚未成功載入，請先至模型設定頁面設定。")
+            return@flow
+        }
+        val reply = generateReply(prompt)
+        for (char in reply) {
+            emit(char.toString())
+            delay(10)
+        }
+    }
+
     override suspend fun analyzeFood(foodName: String, portion: String, goal: String): GemmaFoodAnalysis {
         delay(1200) // Simulate inference delay
         if (_loadState.value != ModelLoadState.Loaded) {

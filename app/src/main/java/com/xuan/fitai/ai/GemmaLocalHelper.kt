@@ -11,6 +11,7 @@ interface GemmaLocalHelper {
     fun loadModel(modelPath: String, modelName: String)
     suspend fun loadModelSync(modelPath: String, modelName: String): Boolean
     suspend fun generateReply(prompt: String): String
+    fun generateReplyFlow(prompt: String): kotlinx.coroutines.flow.Flow<String>
     suspend fun analyzeFood(foodName: String, portion: String, goal: String): GemmaFoodAnalysis
     suspend fun identifyFoodFromImage(bitmap: Bitmap): String
 }

@@ -29,14 +29,15 @@ fun ChatScreen(
 ) {
     val messages by viewModel.chatMessages.collectAsState()
     val isGenerating by viewModel.isGenerating.collectAsState()
+    val isThinking by viewModel.isThinking.collectAsState()
     val errorMsg by viewModel.errorMsg.collectAsState()
     val gemmaLoadState by viewModel.gemmaLoadState.collectAsState()
 
     val listState = rememberLazyListState()
     var inputQuery by remember { mutableStateOf("") }
 
-    // Scroll to bottom when messages list size changes
-    LaunchedEffect(messages.size) {
+    // Scroll to bottom when messages list size or last message content changes
+    LaunchedEffect(messages.size, messages.lastOrNull()?.content) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
         }
@@ -145,13 +146,16 @@ fun ChatScreen(
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                 } else {
-                                    ThinkingContent(rawText = msg.content)
+                                    ThinkingContent(
+                                        rawText = msg.content,
+                                        isGenerating = isGenerating && msg.id == 0
+                                    )
                                 }
                             }
                         }
                     }
 
-                    if (isGenerating) {
+                    if (isThinking) {
                         item {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
