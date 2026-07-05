@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.xuan.fitai.ai.GemmaOutputParser
 import com.xuan.fitai.data.model.Meal
 import com.xuan.fitai.data.model.UserProfile
 import com.xuan.fitai.ui.components.NutritionProgressCard
@@ -388,7 +389,10 @@ fun DashboardScreen(
                                         proteinVal = result.protein.toInt().toString()
                                         carbsVal = result.carbs.toInt().toString()
                                         fatVal = result.fat.toInt().toString()
-                                        aiReasoning = result.reasoning
+                                        aiReasoning = GemmaOutputParser.withThinkingContent(
+                                            thinkingText = result.thinking,
+                                            contentText = result.reasoning
+                                        )
                                     } else {
                                         aiErrorMsg = "⚠️ 估算失敗！請確認已在「模型設定」頁面載入 Gemma 模型。"
                                     }
@@ -447,10 +451,9 @@ fun DashboardScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = aiReasoning,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                ThinkingContent(
+                                    rawText = aiReasoning,
+                                    contentTextStyle = MaterialTheme.typography.bodySmall
                                 )
                             }
                         }
@@ -514,4 +517,3 @@ fun DashboardScreen(
         )
     }
 }
-

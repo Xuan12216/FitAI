@@ -16,6 +16,7 @@ package com.xuan.fitai.ai
 object GemmaOutputParser {
 
     private val CHANNEL_REGEX = Regex("<\\|?channel\\|?>([a-zA-Z0-9_]*)")
+    private val JSON_FENCE_REGEX = Regex("^```(?:json)?\\s*|\\s*```$", RegexOption.IGNORE_CASE)
 
     /**
      * Returns only the actual answer portion of [rawText], stripping any
@@ -73,6 +74,138 @@ object GemmaOutputParser {
         val content = extractContent(rawText)
         val start = content.indexOf('{')
         val end = content.lastIndexOf('}')
-        return if (start != -1 && end > start) content.substring(start, end + 1) else ""
+        return if (start != -1 && end > start) {
+            sanitizeJsonObject(content.substring(start, end + 1))
+        } else {
+            ""
+        }
+    }
+
+    private fun sanitizeJsonObject(json: String): String {
+        val result = StringBuilder(json.length)
+        var inString = false
+        var escaping = false
+        var previousStructuralComma = false
+
+        for (char in json) {
+            if (inString) {
+                result.append(char)
+                if (escaping) {
+                    escaping = false
+                } else if (char == '\\') {
+                    escaping = true
+                } else if (char == '"') {
+                    inString = false
+                }
+                continue
+            }
+
+            when (char) {
+                '"' -> {
+                    inString = true
+                    previousStructuralComma = false
+                    result.append(char)
+                }
+                ',' -> {
+                    if (!previousStructuralComma) {
+                        result.append(char)
+                        previousStructuralComma = true
+                    }
+                }
+                ' ', '\n', '\r', '\t' -> result.append(char)
+                '}', ']' -> {
+                    removeTrailingComma(result)
+                    previousStructuralComma = false
+                    result.append(char)
+                }
+                else -> {
+                    previousStructuralComma = false
+                    result.append(char)
+                }
+            }
+        }
+
+        return result.toString()
+    }
+
+    private fun removeTrailingComma(builder: StringBuilder) {
+        var index = builder.length - 1
+        while (index >= 0 && builder[index].isWhitespace()) {
+            index--
+        }
+        if (index >= 0 && builder[index] == ',') {
+            builder.deleteCharAt(index)
+        }
+    }
+
+    fun extractPartialFoodAnalysis(rawText: String, thinkingText: String?): GemmaFoodAnalysis? {
+        val content = extractContent(rawText).replace(JSON_FENCE_REGEX, "").trim()
+        val calories = extractNumber(content, "calories")
+        val protein = extractNumber(content, "protein")
+        val carbs = extractNumber(content, "carbs")
+        val fat = extractNumber(content, "fat")
+
+        if (calories == null && protein == null && carbs == null && fat == null) {
+            return null
+        }
+
+        return GemmaFoodAnalysis(
+            calories = calories ?: 200f,
+            protein = protein ?: 8f,
+            carbs = carbs ?: 20f,
+            fat = fat ?: 6f,
+            isSuitable = extractBoolean(content, "suitable") ?: true,
+            advice = extractString(content, "advice")
+                ?: "AI 已估算營養數值，但建議文字輸出不完整。",
+            reasoning = extractString(content, "reasoning")
+                ?: "AI 回覆的 JSON 尚未完整結束，已使用可讀取的欄位估算。",
+            thinking = thinkingText
+        )
+    }
+
+    private fun extractNumber(text: String, key: String): Float? {
+        val regex = Regex("\"$key\"\\s*:\\s*(-?\\d+(?:\\.\\d+)?)")
+        return regex.find(text)?.groupValues?.getOrNull(1)?.toFloatOrNull()
+    }
+
+    private fun extractBoolean(text: String, key: String): Boolean? {
+        val regex = Regex("\"$key\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE)
+        return regex.find(text)?.groupValues?.getOrNull(1)?.equals("true", ignoreCase = true)
+    }
+
+    private fun extractString(text: String, key: String): String? {
+        val strictRegex = Regex("\"$key\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"", RegexOption.DOT_MATCHES_ALL)
+        val strictMatch = strictRegex.find(text)
+        if (strictMatch != null) {
+            return unescapeJsonString(strictMatch.groupValues[1]).trim().ifBlank { null }
+        }
+
+        val startRegex = Regex("\"$key\"\\s*:\\s*\"", RegexOption.DOT_MATCHES_ALL)
+        val startMatch = startRegex.find(text) ?: return null
+        val valueStart = startMatch.range.last + 1
+        val partial = text.substring(valueStart)
+            .substringBefore("\n```")
+            .trim()
+            .trimEnd(',', '}', ']', '`')
+        return unescapeJsonString(partial).trim().ifBlank { null }
+    }
+
+    private fun unescapeJsonString(value: String): String {
+        return value
+            .replace("\\\"", "\"")
+            .replace("\\n", "\n")
+            .replace("\\r", "\r")
+            .replace("\\t", "\t")
+            .replace("\\\\", "\\")
+    }
+
+    fun withThinkingContent(thinkingText: String?, contentText: String): String {
+        val content = contentText.trim()
+        val thinking = thinkingText?.trim().orEmpty()
+        return if (thinking.isBlank()) {
+            content
+        } else {
+            "<|channel>thought\n$thinking\n<channel|>\n$content"
+        }
     }
 }

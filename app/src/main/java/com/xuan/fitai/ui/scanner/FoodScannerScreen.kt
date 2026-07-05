@@ -436,11 +436,6 @@ fun FoodScannerScreen(
                                 modifier = Modifier.align(Alignment.CenterHorizontally)
                             )
 
-                            // Show Gemma's thinking process if available
-                            if (!analysis.thinking.isNullOrBlank()) {
-                                ThinkingContent(rawText = "<|channel>thought\n${analysis.thinking}<channel|>")
-                            }
-
                             // Stats Grid Card
                             Card(
                                 modifier = Modifier.fillMaxWidth()
@@ -511,7 +506,12 @@ fun FoodScannerScreen(
                                     Column(modifier = Modifier.padding(16.dp)) {
                                         Text("💡 AI 估算依據：", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                                         Spacer(modifier = Modifier.height(4.dp))
-                                        ThinkingContent(rawText = analysis.reasoning)
+                                        ThinkingContent(
+                                            rawText = GemmaOutputParser.withThinkingContent(
+                                                thinkingText = analysis.thinking,
+                                                contentText = analysis.reasoning
+                                            )
+                                        )
                                     }
                                 }
                             }

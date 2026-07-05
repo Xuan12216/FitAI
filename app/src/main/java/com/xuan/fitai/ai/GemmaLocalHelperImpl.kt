@@ -115,8 +115,9 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             You are a professional nutritionist. The user's goal is: $goal. The user just scanned: $foodName (portion: $portion).
             Estimate its calorie count (kcal) and macronutrients (protein, carbs, fat in grams).
             Provide your response in JSON format matching this structure:
-            {"calories": 150.0, "protein": 10.0, "carbs": 12.0, "fat": 3.0, "suitable": true, "advice": "Concise advice in Traditional Chinese.", "reasoning": "Reasoning details about how calories and macronutrients were calculated in Traditional Chinese."}
-            Ensure you output ONLY the raw JSON string.
+            {"calories": 150.0, "protein": 10.0, "carbs": 12.0, "fat": 3.0, "suitable": true, "advice": "Concise advice in Traditional Chinese.", "reasoning": "Short estimate basis in Traditional Chinese."}
+            Output ONLY one raw JSON object. Do not use markdown fences. Keep advice and reasoning each under 40 Traditional Chinese characters.
+            If the food is chocolate, candy, dessert, or a snack and no weight is given, assume one common serving around 30g. Do not output zero carbs or zero fat for chocolate.
         """.trimIndent()
 
         val reply = generateReply(prompt)
@@ -127,7 +128,7 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             val cleanReply = GemmaOutputParser.extractJson(reply)
             android.util.Log.d("FitAI_Diag", "analyzeFood cleanReply: $cleanReply")
             val json = org.json.JSONObject(cleanReply)
-            GemmaFoodAnalysis(
+            sanitizeNutritionEstimate(foodName, GemmaFoodAnalysis(
                 calories = json.optDouble("calories", 150.0).toFloat(),
                 protein = json.optDouble("protein", 10.0).toFloat(),
                 carbs = json.optDouble("carbs", 12.0).toFloat(),
@@ -136,9 +137,14 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
                 advice = json.optString("advice", "這是本地 AI 估算的營養價值。請視實際烹調方式調整。"),
                 reasoning = json.optString("reasoning", "無本地 AI 估算依據。"),
                 thinking = thinkingText
-            )
+            ))
         } catch (e: Exception) {
             android.util.Log.e("FitAI_Diag", "analyzeFood JSON parse failed", e)
+            val partialAnalysis = GemmaOutputParser.extractPartialFoodAnalysis(reply, thinkingText)
+            if (partialAnalysis != null) {
+                android.util.Log.w("FitAI_Diag", "analyzeFood used partial JSON recovery")
+                return sanitizeNutritionEstimate(foodName, partialAnalysis)
+            }
             GemmaFoodAnalysis(
                 calories = 200f,
                 protein = 8f,
@@ -150,6 +156,36 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
                 thinking = thinkingText
             )
         }
+    }
+
+    private fun sanitizeNutritionEstimate(foodName: String, analysis: GemmaFoodAnalysis): GemmaFoodAnalysis {
+        val normalizedName = foodName.lowercase()
+        val isChocolateLike = listOf("巧克力", "chocolate", "cocoa", "可可", "糖果", "甜點", "dessert", "candy")
+            .any { normalizedName.contains(it) }
+        val macroCalories = analysis.protein * 4f + analysis.carbs * 4f + analysis.fat * 9f
+        val hasNearZeroMacros = analysis.protein < 0.5f && analysis.carbs < 0.5f && analysis.fat < 0.5f
+        val suspiciousChocolate = isChocolateLike && (
+            analysis.calories < 80f ||
+                analysis.carbs < 5f ||
+                analysis.fat < 3f ||
+                hasNearZeroMacros ||
+                macroCalories < 40f
+            )
+
+        if (!suspiciousChocolate) {
+            return analysis
+        }
+
+        android.util.Log.w("FitAI_Diag", "Corrected suspicious chocolate nutrition estimate: $analysis")
+        return analysis.copy(
+            calories = 160f,
+            protein = 2f,
+            carbs = 17f,
+            fat = 9f,
+            isSuitable = false,
+            advice = "巧克力糖脂較高，增肌可少量搭配正餐。",
+            reasoning = "以一般巧克力約30克估算，主要為糖與脂肪。"
+        )
     }
 
     override suspend fun identifyFoodFromImage(bitmap: Bitmap): String = withContext(Dispatchers.IO) {
