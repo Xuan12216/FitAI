@@ -97,6 +97,10 @@ object GemmaOutputParser {
         }
     }
 
+    fun extractJsonStringValue(rawText: String, key: String): String? {
+        return extractString(extractContent(rawText), key)
+    }
+
     private fun sanitizeJsonObject(json: String): String {
         val result = StringBuilder(json.length)
         var inString = false

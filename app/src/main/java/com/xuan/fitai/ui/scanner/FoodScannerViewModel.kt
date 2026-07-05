@@ -10,6 +10,7 @@ import com.xuan.fitai.data.model.ModelLoadState
 import com.xuan.fitai.data.model.UserProfile
 import com.xuan.fitai.data.repository.MealRepository
 import com.xuan.fitai.data.repository.UserRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -112,6 +113,8 @@ class FoodScannerViewModel(
                     // No model loaded at all — show blank for user to fill in
                     _uiState.value = ScannerUiState.EditDetails("未知食物", 0f, emptyList())
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.value = ScannerUiState.Error("影像辨識失敗: ${e.localizedMessage}")
             }
@@ -149,6 +152,8 @@ class FoodScannerViewModel(
                 val goal = userProfile.value.goal
                 val analysis = gemmaHelper.analyzeFood(foodName, portion, goal)
                 _uiState.value = ScannerUiState.GemmaAnalysisResult(foodName, portion, analysis)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.value = ScannerUiState.Error("Gemma 分析失敗: ${e.localizedMessage}")
             }

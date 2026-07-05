@@ -11,9 +11,11 @@ import com.xuan.fitai.data.repository.UserRepository
 import com.xuan.fitai.data.repository.WorkoutRepository
 import com.xuan.fitai.util.HealthConnectHelper
 import com.xuan.fitai.util.HealthData
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import org.json.JSONArray
+import org.json.JSONObject
 
 class WorkoutViewModel(
     private val userRepository: UserRepository,
@@ -181,7 +183,9 @@ class WorkoutViewModel(
     fun generateAIWorkoutPlan(daysPerWeek: Int, preference: String) {
         viewModelScope.launch {
             _isGenerating.value = true
+            _isSummarizing.value = true
             _generationThinking.value = null
+            _workoutSummary.value = ""
             try {
                 val profile = userProfile.value
                 val prompt = """
@@ -194,13 +198,22 @@ class WorkoutViewModel(
                     - Preferences: $preference
 
                     Generate a customized weekly workout plan for them.
-                    Provide your response in JSON format matching this array structure:
-                    [
-                      {"dayOfWeek": "星期一", "exerciseName": "槓鈴臥推 (Bench Press)", "sets": 4, "reps": "8-12次", "targetMuscleGroup": "胸肌"},
-                      {"dayOfWeek": "星期三", "exerciseName": "深蹲 (Barbell Squat)", "sets": 4, "reps": "10次", "targetMuscleGroup": "腿部"}
-                    ]
-                    Only include the days they should train based on the selected $daysPerWeek days. Use traditional Chinese for the days (e.g. 星期一, 星期三) and targetMuscleGroup.
-                    Ensure you output ONLY the raw JSON array string.
+                    Output ONLY one raw JSON object. Do not include markdown, code fences, or extra prose.
+                    The JSON object must match this schema exactly:
+                    {
+                      "summary": "3-5 short Traditional Chinese sentences. Mention weekly frequency, main training focus, and a motivational closing.",
+                      "weeklyPlan": [
+                        {
+                          "dayOfWeek": "Traditional Chinese weekday name, for example 星期一",
+                          "exerciseName": "Traditional Chinese exercise name with optional English in parentheses",
+                          "sets": 4,
+                          "reps": "8-12次",
+                          "targetMuscleGroup": "Traditional Chinese target muscle group"
+                        }
+                      ]
+                    }
+                    Only include the days they should train based on the selected $daysPerWeek days.
+                    Make weeklyPlan practical and balanced for the user's goal and experience level.
                 """.trimIndent()
 
                 var currentText = ""
@@ -208,15 +221,28 @@ class WorkoutViewModel(
                     currentText += token
                     val thinking = GemmaOutputParser.extractThinking(currentText)
                     _generationThinking.value = thinking
+                    val partialSummary = GemmaOutputParser.extractJsonStringValue(currentText, "summary")
+                    _workoutSummary.value = if (!partialSummary.isNullOrBlank()) {
+                        GemmaOutputParser.withThinkingContent(
+                            thinkingText = thinking,
+                            contentText = partialSummary
+                        )
+                    } else {
+                        currentText
+                    }
                 }
                 
                 val thinking = GemmaOutputParser.extractThinking(currentText)
                 _generationThinking.value = thinking
                 userPreferenceStore.saveWorkoutPlanThinking(thinking ?: "")
 
+                val jsonObjectStr = GemmaOutputParser.extractJson(currentText)
                 val jsonArrayStr = GemmaOutputParser.extractJsonArray(currentText)
-                if (jsonArrayStr.isNotBlank()) {
-                    val jsonArray = JSONArray(jsonArrayStr)
+                val rootObject = if (jsonObjectStr.isNotBlank()) JSONObject(jsonObjectStr) else null
+                val summary = rootObject?.optString("summary")?.trim().orEmpty()
+                val jsonArray = rootObject?.optJSONArray("weeklyPlan")
+                    ?: if (jsonArrayStr.isNotBlank()) JSONArray(jsonArrayStr) else null
+                if (jsonArray != null) {
                     if (jsonArray.length() > 0) {
                         workoutRepository.clearAllWorkoutPlans()
                         for (i in 0 until jsonArray.length()) {
@@ -231,14 +257,22 @@ class WorkoutViewModel(
                                 )
                             )
                         }
-                        // Generate a streaming AI summary of the plan
-                        generateWorkoutSummary(jsonArrayStr)
+                        val summaryWithThinking = GemmaOutputParser.withThinkingContent(
+                            thinkingText = thinking,
+                            contentText = summary
+                        )
+                        _workoutSummary.value = summaryWithThinking
+                        userPreferenceStore.saveWorkoutSummary(summaryWithThinking)
                     }
                 } else {
                     // Fallback to default if JSON extraction fails
                     userPreferenceStore.saveWorkoutPlanThinking("")
+                    userPreferenceStore.saveWorkoutSummary("")
+                    _workoutSummary.value = null
                     generateDefaultWorkoutPlan()
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("FitAI_Workout", "AI generation failed", e)
                 userPreferenceStore.saveWorkoutPlanThinking("")
@@ -246,6 +280,7 @@ class WorkoutViewModel(
                 generateDefaultWorkoutPlan()
             } finally {
                 _isGenerating.value = false
+                _isSummarizing.value = false
             }
         }
     }
@@ -286,6 +321,8 @@ class WorkoutViewModel(
                 // Persist raw text so ThinkingContent re-parses correctly on next visit
                 _workoutSummary.value = rawText
                 userPreferenceStore.saveWorkoutSummary(rawText)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("FitAI_Workout", "Summary generation failed", e)
             } finally {

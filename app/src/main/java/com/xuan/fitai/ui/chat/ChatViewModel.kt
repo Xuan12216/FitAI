@@ -11,6 +11,7 @@ import com.xuan.fitai.data.model.ModelLoadState
 import com.xuan.fitai.data.model.UserProfile
 import com.xuan.fitai.data.repository.MealRepository
 import com.xuan.fitai.data.repository.UserRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -98,6 +99,8 @@ class ChatViewModel(
                 if (currentText.isNotEmpty()) {
                     chatDao.insertMessage(ChatMessage(role = "assistant", content = currentText))
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _errorMsg.value = "Gemma 回覆失敗: ${e.localizedMessage}"
             } finally {

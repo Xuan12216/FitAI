@@ -179,7 +179,7 @@ fun WorkoutScreen(
 
 
 
-                    // Show card once summary starts streaming (second AI call)
+                    // Show the card while the combined plan + summary request is running.
                     if (!workoutSummary.isNullOrBlank() || isSummarizing) {
                         item {
                             AISummaryCard(
@@ -738,7 +738,7 @@ private fun AISummaryCard(
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     Text(
-                        text = "AI 摘要生成中，請稍候...",
+                        text = "正在產生運動計畫與摘要，請稍候...",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
