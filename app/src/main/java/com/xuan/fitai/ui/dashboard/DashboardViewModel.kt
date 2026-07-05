@@ -78,6 +78,18 @@ class DashboardViewModel(
         }
     }
 
+    suspend fun askAiForMealSuggestion(foodName: String): com.xuan.fitai.ai.GemmaFoodAnalysis? {
+        if (gemmaHelper.loadState.value != ModelLoadState.Loaded) {
+            return null
+        }
+        val goal = userProfile.value.goal
+        return try {
+            gemmaHelper.analyzeFood(foodName, "1份", goal)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     fun addManualMeal(name: String, cal: Float, p: Float, c: Float, f: Float) {
         viewModelScope.launch {
             mealRepository.insertMeal(

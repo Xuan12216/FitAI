@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -35,6 +36,7 @@ fun DashboardScreen(
     val isAiAdviceGenerating by viewModel.isAiAdviceGenerating.collectAsState()
     val loadedModelName by viewModel.loadedModelName.collectAsState()
     val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
 
     var showManualAddDialog by remember { mutableStateOf(false) }
 
@@ -345,40 +347,110 @@ fun DashboardScreen(
         var proteinVal by remember { mutableStateOf("") }
         var carbsVal by remember { mutableStateOf("") }
         var fatVal by remember { mutableStateOf("") }
+        var isAiAnalyzing by remember { mutableStateOf(false) }
+        var aiErrorMsg by remember { mutableStateOf<String?>(null) }
 
         AlertDialog(
             onDismissRequest = { showManualAddDialog = false },
             title = { Text("手動新增餐點") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     OutlinedTextField(
                         value = mealName,
                         onValueChange = { mealName = it },
-                        label = { Text("餐點名稱") }
+                        label = { Text("餐點名稱") },
+                        placeholder = { Text("例如：貢丸湯 一碗") },
+                        modifier = Modifier.fillMaxWidth()
                     )
+
+                    Button(
+                        onClick = {
+                            if (mealName.isNotBlank()) {
+                                isAiAnalyzing = true
+                                aiErrorMsg = null
+                                coroutineScope.launch {
+                                    val result = viewModel.askAiForMealSuggestion(mealName)
+                                    isAiAnalyzing = false
+                                    if (result != null) {
+                                        caloriesVal = result.calories.toInt().toString()
+                                        proteinVal = result.protein.toInt().toString()
+                                        carbsVal = result.carbs.toInt().toString()
+                                        fatVal = result.fat.toInt().toString()
+                                    } else {
+                                        aiErrorMsg = "⚠️ 估算失敗！請確認已在「模型設定」頁面載入 Gemma 模型。"
+                                    }
+                                }
+                            } else {
+                                aiErrorMsg = "⚠️ 請先輸入餐點名稱"
+                            }
+                        },
+                        enabled = !isAiAnalyzing,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                    ) {
+                        if (isAiAnalyzing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("本地 AI 估算中...")
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("✨ 使用本地 AI 估算熱量與營養素")
+                        }
+                    }
+
+                    if (aiErrorMsg != null) {
+                        Text(
+                            text = aiErrorMsg!!,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        )
+                    }
+
+                    Divider(modifier = Modifier.padding(vertical = 4.dp))
+
                     OutlinedTextField(
                         value = caloriesVal,
                         onValueChange = { caloriesVal = it },
                         label = { Text("熱量 (kcal)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = proteinVal,
                         onValueChange = { proteinVal = it },
                         label = { Text("蛋白質 (g)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = carbsVal,
                         onValueChange = { carbsVal = it },
                         label = { Text("碳水化合物 (g)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = fatVal,
                         onValueChange = { fatVal = it },
                         label = { Text("脂肪 (g)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             },
