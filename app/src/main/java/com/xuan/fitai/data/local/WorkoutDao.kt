@@ -18,6 +18,9 @@ interface WorkoutDao {
     @Update
     suspend fun updateWorkoutPlan(plan: WorkoutPlan)
 
+    @Delete
+    suspend fun deleteWorkoutPlan(plan: WorkoutPlan)
+
     @Query("DELETE FROM workout_plans")
     suspend fun clearAllWorkoutPlans()
 }

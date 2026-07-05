@@ -2,10 +2,7 @@ package com.xuan.fitai.ai
 
 import android.content.Context
 import android.graphics.Bitmap
-import com.google.mediapipe.framework.image.BitmapImageBuilder
-import com.google.mediapipe.tasks.core.BaseOptions
-import com.google.mediapipe.tasks.vision.core.RunningMode
-import com.google.mediapipe.tasks.vision.imageclassifier.ImageClassifier
+import org.tensorflow.lite.Interpreter
 import com.xuan.fitai.data.model.ModelLoadState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,17 +10,23 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class FoodClassifierHelperImpl(private val context: Context) : FoodClassifierHelper {
 
     private val _loadState = MutableStateFlow<ModelLoadState>(ModelLoadState.NotFound)
     override val loadState: StateFlow<ModelLoadState> = _loadState.asStateFlow()
 
-    private var imageClassifier: ImageClassifier? = null
-    // Label map loaded from assets: index -> human-readable food name
+    private var interpreter: Interpreter? = null
     private var labelMap: List<String> = emptyList()
+    
+    private var inputWidth = 224
+    private var inputHeight = 224
+    private var isInputFloat = true
+    private var numClasses = 0
 
-    private fun loadModelFile(modelPath: String): java.nio.ByteBuffer {
+    private fun loadModelFile(modelPath: String): ByteBuffer {
         val file = File(modelPath)
         val inputStream = java.io.FileInputStream(file)
         val fileChannel = inputStream.channel
@@ -52,21 +55,24 @@ class FoodClassifierHelperImpl(private val context: Context) : FoodClassifierHel
 
         _loadState.value = ModelLoadState.Loading
         try {
-            // Load label map from assets
             loadLabelMap()
 
             val byteBuffer = loadModelFile(modelPath)
-            val baseOptions = BaseOptions.builder()
-                .setModelAssetBuffer(byteBuffer)
-                .build()
+            val newInterpreter = Interpreter(byteBuffer)
+            
+            val inputTensor = newInterpreter.getInputTensor(0)
+            val inputShape = inputTensor.shape() // e.g. [1, 224, 224, 3]
+            inputHeight = inputShape[1]
+            inputWidth = inputShape[2]
+            
+            val inputDataType = inputTensor.dataType()
+            isInputFloat = inputDataType.toString().contains("FLOAT", ignoreCase = true)
+            
+            val outputTensor = newInterpreter.getOutputTensor(0)
+            val outputShape = outputTensor.shape() // e.g. [1, 2024]
+            numClasses = outputShape[1]
 
-            val options = ImageClassifier.ImageClassifierOptions.builder()
-                .setBaseOptions(baseOptions)
-                .setRunningMode(RunningMode.IMAGE)
-                .setMaxResults(5)
-                .build()
-
-            imageClassifier = ImageClassifier.createFromOptions(context, options)
+            interpreter = newInterpreter
             _loadState.value = ModelLoadState.Loaded
         } catch (e: Exception) {
             _loadState.value = ModelLoadState.Failed(e.localizedMessage ?: "載入失敗")
@@ -74,24 +80,63 @@ class FoodClassifierHelperImpl(private val context: Context) : FoodClassifierHel
     }
 
     override suspend fun classifyImage(bitmap: Bitmap): List<FoodClassificationResult> = withContext(Dispatchers.IO) {
-        val classifier = imageClassifier ?: return@withContext emptyList()
+        val currentInterpreter = interpreter ?: return@withContext emptyList()
         try {
-            val mpImage = BitmapImageBuilder(bitmap).build()
-            val result = classifier.classify(mpImage)
-            result.classificationResult().classifications().flatMap { classification ->
-                classification.categories().map { category ->
-                    // Use index to look up human-readable label from our label map
-                    val rawName = if (labelMap.isNotEmpty() && category.index() >= 0 && category.index() < labelMap.size) {
-                        labelMap[category.index()]
+            val bytesPerChannel = if (isInputFloat) 4 else 1
+            val inputBuffer = ByteBuffer.allocateDirect(1 * inputWidth * inputHeight * 3 * bytesPerChannel).apply {
+                order(ByteOrder.nativeOrder())
+            }
+
+            val resizedBitmap = Bitmap.createScaledBitmap(bitmap, inputWidth, inputHeight, true)
+            val intValues = IntArray(inputWidth * inputHeight)
+            resizedBitmap.getPixels(intValues, 0, resizedBitmap.width, 0, 0, resizedBitmap.width, resizedBitmap.height)
+
+            inputBuffer.rewind()
+            for (pixelValue in intValues) {
+                val r = (pixelValue shr 16) and 0xFF
+                val g = (pixelValue shr 8) and 0xFF
+                val b = pixelValue and 0xFF
+                
+                if (isInputFloat) {
+                    inputBuffer.putFloat(r / 255.0f)
+                    inputBuffer.putFloat(g / 255.0f)
+                    inputBuffer.putFloat(b / 255.0f)
+                } else {
+                    inputBuffer.put(r.toByte())
+                    inputBuffer.put(g.toByte())
+                    inputBuffer.put(b.toByte())
+                }
+            }
+
+            val outputBuffer = ByteBuffer.allocateDirect(1 * numClasses * 4).apply {
+                order(ByteOrder.nativeOrder())
+            }
+            
+            currentInterpreter.run(inputBuffer, outputBuffer)
+
+            outputBuffer.rewind()
+            val probabilities = FloatArray(numClasses)
+            outputBuffer.asFloatBuffer().get(probabilities)
+
+            val results = mutableListOf<FoodClassificationResult>()
+            for (i in 0 until numClasses) {
+                val confidence = probabilities[i]
+                if (confidence > 0.01f) {
+                    val rawName = if (labelMap.isNotEmpty() && i >= 0 && i < labelMap.size) {
+                        labelMap[i]
                     } else {
-                        category.categoryName()
+                        "Class $i"
                     }
-                    FoodClassificationResult(
-                        label = translateFoodLabel(rawName),
-                        confidence = category.score()
+                    results.add(
+                        FoodClassificationResult(
+                            label = translateFoodLabel(rawName),
+                            confidence = confidence
+                        )
                     )
                 }
             }
+            results.sortByDescending { it.confidence }
+            results.take(5)
         } catch (e: Exception) {
             emptyList()
         }
@@ -100,7 +145,6 @@ class FoodClassifierHelperImpl(private val context: Context) : FoodClassifierHel
     private fun translateFoodLabel(label: String): String {
         val lower = label.lowercase()
         return when {
-            // Pass through Freebase IDs that have no translation as-is (fallback)
             lower.startsWith("/m/") || lower.startsWith("/g/") -> label
             lower.contains("french fries") || lower.contains("french fry") || lower.contains("potato chips") || lower.contains("chips") -> "薯條"
             lower.contains("hotdog") || lower.contains("hot dog") -> "熱狗"

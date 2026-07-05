@@ -122,7 +122,9 @@ fun MainNavigation(modifier: Modifier = Modifier) {
             val workoutVm: WorkoutViewModel = viewModel(
                 factory = WorkoutViewModel.Factory(
                     app.userRepository,
-                    app.workoutRepository
+                    app.workoutRepository,
+                    app.gemmaHelper,
+                    app.healthConnectHelper
                 )
             )
             WorkoutScreen(

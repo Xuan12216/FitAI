@@ -1,52 +1,32 @@
 package com.xuan.fitai.ui.workout
 
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Face
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SuggestionChip
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
+import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.PermissionController
 import com.xuan.fitai.data.model.WorkoutPlan
+import com.xuan.fitai.ui.components.ThinkingContent
+import com.xuan.fitai.util.HealthData
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -57,6 +37,37 @@ fun WorkoutScreen(
 ) {
     val profile by viewModel.userProfile.collectAsState()
     val plans by viewModel.workoutPlans.collectAsState()
+    val isGenerating by viewModel.isGenerating.collectAsState()
+    val generationThinking by viewModel.generationThinking.collectAsState()
+    val healthData by viewModel.healthData.collectAsState()
+    val hasHealthPermissions by viewModel.hasHealthPermissions.collectAsState()
+
+    var showAiDialog by remember { mutableStateOf(false) }
+    var showAddEditDialog by remember { mutableStateOf(false) }
+    var selectedPlanForEdit by remember { mutableStateOf<WorkoutPlan?>(null) }
+
+    // Health Connect Permission Launcher
+    val permissionsLauncher = rememberLauncherForActivityResult(
+        PermissionController.createRequestPermissionResultContract()
+    ) { granted ->
+        viewModel.checkHealthConnectStatus()
+        viewModel.loadHealthData()
+    }
+
+    // Refresh Health Connect data when entering screen or returning from Play Store/Settings
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.checkHealthConnectStatus()
+                viewModel.loadHealthData()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     val dayOrder = listOf("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")
     val today = currentDayOfWeek()
@@ -84,84 +95,331 @@ fun WorkoutScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.regeneratePlan() }) {
-                        Icon(imageVector = Icons.Default.Refresh, contentDescription = "重新產生計畫")
+                    IconButton(onClick = { showAiDialog = true }) {
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = "AI 重新設計計畫")
                     }
                 }
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = {
+                    selectedPlanForEdit = null
+                    showAddEditDialog = true
+                },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ) {
+                Icon(imageVector = Icons.Default.Add, contentDescription = "新增運動")
+            }
         }
     ) { innerPadding ->
-        if (plans.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .padding(innerPadding)
-                    .fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
-            return@Scaffold
-        }
-
-        LazyColumn(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                WorkoutPlanHeader(
-                    goal = profile.goal,
-                    experience = profile.workoutExperience,
-                    weeklySets = weeklySets,
-                    trainingDayCount = trainingDayCount,
-                    completionRatio = completionRatio,
-                    completedCount = completedCount,
-                    totalCount = plans.size
-                )
-            }
-
-            item {
-                HealthConnectPreviewCard()
-            }
-
-            item {
-                TodayWorkoutCard(
-                    today = today,
-                    plans = todayPlans,
-                    onToggle = viewModel::toggleWorkoutPlan
-                )
-            }
-
-            item {
-                MuscleBalanceCard(topMuscleGroups = topMuscleGroups)
-            }
-
-            sortedDays.forEach { day ->
-                stickyHeader {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.background)
-                            .padding(top = 8.dp, bottom = 4.dp)
-                    ) {
-                        Text(
-                            text = day,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-                }
-
-                items(groupedPlans[day].orEmpty(), key = { it.id }) { item ->
-                    WorkoutPlanRow(
-                        plan = item,
-                        onToggle = { viewModel.toggleWorkoutPlan(item) }
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            if (isGenerating) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "✨ 本地 Gemma 4 正在為您排程運動計畫...",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "可能需要幾秒鐘，請稍候",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 80.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item {
+                        WorkoutPlanHeader(
+                            goal = profile.goal,
+                            experience = profile.workoutExperience,
+                            weeklySets = weeklySets,
+                            trainingDayCount = trainingDayCount,
+                            completionRatio = completionRatio,
+                            completedCount = completedCount,
+                            totalCount = plans.size
+                        )
+                    }
+
+                    // Display Gemma's generation thinking process if available
+                    if (!generationThinking.isNullOrBlank()) {
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        text = "💡 AI 圖示設計推薦依據：",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    ThinkingContent(rawText = "<|channel>thought\n$generationThinking<channel|>")
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        val context = LocalContext.current
+                        val sdkStatus by viewModel.healthConnectSdkStatus.collectAsState()
+                        HealthConnectPreviewCard(
+                            sdkStatus = sdkStatus,
+                            hasPermissions = hasHealthPermissions,
+                            healthData = healthData,
+                            onRequestPermissions = {
+                                if (sdkStatus == HealthConnectClient.SDK_AVAILABLE) {
+                                    permissionsLauncher.launch(viewModel.getHealthConnectHelper().permissions)
+                                } else {
+                                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                                        data = Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata")
+                                        setPackage("com.android.vending")
+                                    }
+                                    try {
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata"))
+                                        context.startActivity(webIntent)
+                                    }
+                                }
+                            }
+                        )
+                    }
+
+                    item {
+                        TodayWorkoutCard(
+                            today = today,
+                            plans = todayPlans,
+                            onToggle = viewModel::toggleWorkoutPlan,
+                            onEdit = {
+                                selectedPlanForEdit = it
+                                showAddEditDialog = true
+                            },
+                            onDelete = viewModel::deleteWorkoutPlan
+                        )
+                    }
+
+                    item {
+                        MuscleBalanceCard(topMuscleGroups = topMuscleGroups)
+                    }
+
+                    sortedDays.forEach { day ->
+                        stickyHeader {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.background)
+                                    .padding(top = 8.dp, bottom = 4.dp)
+                            ) {
+                                Text(
+                                    text = day,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                        }
+
+                        items(groupedPlans[day].orEmpty(), key = { it.id }) { item ->
+                            WorkoutPlanRow(
+                                plan = item,
+                                onToggle = { viewModel.toggleWorkoutPlan(item) },
+                                onEdit = {
+                                    selectedPlanForEdit = item
+                                    showAddEditDialog = true
+                                },
+                                onDelete = { viewModel.deleteWorkoutPlan(item) }
+                            )
+                        }
+                    }
+                }
             }
         }
+    }
+
+    // AI Generation Configuration Dialog
+    if (showAiDialog) {
+        var daysPerWeek by remember { mutableStateOf(3) }
+        var preference by remember { mutableStateOf("阻力訓練") }
+
+        AlertDialog(
+            onDismissRequest = { showAiDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFB300))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("AI 智能設計運動計畫", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(
+                        "本地 Gemma 4 將根據您的目標「${profile.goal}」與身型資料，客製化設計一週運動計畫。",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    Column {
+                        Text("每週訓練天數：$daysPerWeek 天", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        Slider(
+                            value = daysPerWeek.toFloat(),
+                            onValueChange = { daysPerWeek = it.toInt() },
+                            valueRange = 2f..6f,
+                            steps = 3
+                        )
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("訓練偏好：", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("阻力訓練", "有氧減脂", "徒手健體", "混合訓練").forEach { pref ->
+                                FilterChip(
+                                    selected = preference == pref,
+                                    onClick = { preference = pref },
+                                    label = { Text(pref) }
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showAiDialog = false
+                        viewModel.generateAIWorkoutPlan(daysPerWeek, preference)
+                    }
+                ) {
+                    Text("智能生成")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAiDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    // Add / Edit Manual Workout Dialog
+    if (showAddEditDialog) {
+        var dayOfWeek by remember { mutableStateOf(selectedPlanForEdit?.dayOfWeek ?: "星期一") }
+        var exerciseName by remember { mutableStateOf(selectedPlanForEdit?.exerciseName ?: "") }
+        var setsString by remember { mutableStateOf(selectedPlanForEdit?.sets?.toString() ?: "3") }
+        var reps by remember { mutableStateOf(selectedPlanForEdit?.reps ?: "10次") }
+        var targetMuscleGroup by remember { mutableStateOf(selectedPlanForEdit?.targetMuscleGroup ?: "全身") }
+
+        AlertDialog(
+            onDismissRequest = { showAddEditDialog = false },
+            title = {
+                Text(
+                    text = if (selectedPlanForEdit == null) "新增運動項目" else "編輯運動項目",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Day of week selector
+                    var showDayDropdown by remember { mutableStateOf(false) }
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { showDayDropdown = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("選擇天數：$dayOfWeek")
+                        }
+                        DropdownMenu(
+                            expanded = showDayDropdown,
+                            onDismissRequest = { showDayDropdown = false }
+                        ) {
+                            dayOrder.forEach { day ->
+                                DropdownMenuItem(
+                                    text = { Text(day) },
+                                    onClick = {
+                                        dayOfWeek = day
+                                        showDayDropdown = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = exerciseName,
+                        onValueChange = { exerciseName = it },
+                        label = { Text("動作名稱 (例如: 深蹲, 跑步)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = setsString,
+                        onValueChange = { setsString = it },
+                        label = { Text("組數") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = reps,
+                        onValueChange = { reps = it },
+                        label = { Text("次數 / 時間 (例如: 10次, 45秒)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = targetMuscleGroup,
+                        onValueChange = { targetMuscleGroup = it },
+                        label = { Text("目標肌群 (例如: 胸肌, 腿部, 核心)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val sets = setsString.toIntOrNull() ?: 3
+                        if (exerciseName.isNotBlank()) {
+                            if (selectedPlanForEdit == null) {
+                                viewModel.addWorkoutPlan(dayOfWeek, exerciseName, sets, reps, targetMuscleGroup)
+                            } else {
+                                viewModel.updateWorkoutPlanDetails(
+                                    selectedPlanForEdit!!.copy(
+                                        dayOfWeek = dayOfWeek,
+                                        exerciseName = exerciseName,
+                                        sets = sets,
+                                        reps = reps,
+                                        targetMuscleGroup = targetMuscleGroup
+                                    )
+                                )
+                            }
+                            showAddEditDialog = false
+                        }
+                    }
+                ) {
+                    Text("儲存")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddEditDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 }
 
@@ -218,7 +476,12 @@ private fun WorkoutPlanHeader(
 }
 
 @Composable
-private fun HealthConnectPreviewCard() {
+private fun HealthConnectPreviewCard(
+    sdkStatus: Int,
+    hasPermissions: Boolean,
+    healthData: HealthData?,
+    onRequestPermissions: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
@@ -232,25 +495,69 @@ private fun HealthConnectPreviewCard() {
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Health Connect",
+                    text = "Health Connect 健身數據",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SuggestionChip(onClick = {}, label = { Text("運動紀錄") })
-                SuggestionChip(onClick = {}, label = { Text("步數") })
-                SuggestionChip(onClick = {}, label = { Text("心率") })
-            }
-
-            OutlinedButton(
-                onClick = {},
-                enabled = false,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("準備接入 Health Connect")
+            if (sdkStatus != HealthConnectClient.SDK_AVAILABLE) {
+                Text(
+                    text = "您的裝置尚未安裝或需要更新 Google Health Connect。請點擊下方按鈕前往 Google Play 商店下載安裝，方可接入您的今日健身數據！",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.Medium
+                )
+                Button(
+                    onClick = onRequestPermissions,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("安裝 Google Health Connect")
+                }
+            } else if (!hasPermissions) {
+                Text(
+                    text = "串接 Health Connect 可以直接讀取您的今日步數、平均心率與消耗熱量！",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Button(
+                    onClick = onRequestPermissions,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("授權串接健康數據")
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("今日步數", style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            text = "${healthData?.steps ?: 0} 步",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("平均心率", style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            text = "${healthData?.heartRate ?: 0} bpm",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("活動消耗", style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            text = "${healthData?.calories ?: 0} kcal",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                }
             }
         }
     }
@@ -260,7 +567,9 @@ private fun HealthConnectPreviewCard() {
 private fun TodayWorkoutCard(
     today: String,
     plans: List<WorkoutPlan>,
-    onToggle: (WorkoutPlan) -> Unit
+    onToggle: (WorkoutPlan) -> Unit,
+    onEdit: (WorkoutPlan) -> Unit,
+    onDelete: (WorkoutPlan) -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -282,7 +591,12 @@ private fun TodayWorkoutCard(
                 )
             } else {
                 plans.forEach { plan ->
-                    WorkoutPlanRow(plan = plan, onToggle = { onToggle(plan) })
+                    WorkoutPlanRow(
+                        plan = plan,
+                        onToggle = { onToggle(plan) },
+                        onEdit = { onEdit(plan) },
+                        onDelete = { onDelete(plan) }
+                    )
                 }
             }
         }
@@ -320,42 +634,56 @@ private fun MuscleBalanceCard(topMuscleGroups: List<Map.Entry<String, Int>>) {
 @Composable
 private fun WorkoutPlanRow(
     plan: WorkoutPlan,
-    onToggle: () -> Unit
+    onToggle: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
 ) {
-    ListItem(
-        headlineContent = {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                if (plan.isCompleted) {
+                    MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.25f)
+                } else {
+                    Color.Transparent
+                }
+            )
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(
+            checked = plan.isCompleted,
+            onCheckedChange = { onToggle() }
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = plan.exerciseName,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.bodyLarge
             )
-        },
-        supportingContent = {
-            Column {
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "${plan.sets} 組 ・ ${plan.reps} ・ ${plan.targetMuscleGroup}",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-        },
-        leadingContent = {
-            Checkbox(
-                checked = plan.isCompleted,
-                onCheckedChange = { onToggle() }
+            Text(
+                text = "${plan.sets} 組 ・ ${plan.reps} ・ ${plan.targetMuscleGroup}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-        },
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                if (plan.isCompleted) {
-                    MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f)
-                } else {
-                    MaterialTheme.colorScheme.surface
-                }
+        }
+        IconButton(onClick = onEdit) {
+            Icon(
+                imageVector = Icons.Default.Edit,
+                contentDescription = "編輯",
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
             )
-    )
-    Divider(modifier = Modifier.padding(horizontal = 8.dp))
+        }
+        IconButton(onClick = onDelete) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = "刪除",
+                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+            )
+        }
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
 }
 
 private fun currentDayOfWeek(): String {

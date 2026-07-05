@@ -104,6 +104,20 @@ dependencies {
 
   // MediaPipe
   implementation(libs.mediapipe.tasks.genai)
-  implementation(libs.mediapipe.tasks.vision)
+
+  // Health Connect
+  implementation("androidx.health.connect:connect-client:1.1.0-alpha11")
+
+  // 16 KB Page Size Compatibility overrides
+  implementation("androidx.graphics:graphics-path:1.1.0")
+  implementation("com.google.ai.edge.litert:litert:1.4.2")
+  implementation("com.google.ai.edge.litert:litert-gpu:1.4.2")
+  implementation("com.google.ai.edge.litert:litert-gpu-api:1.4.2")
+  implementation("com.google.ai.edge.litert:litert-support-api:1.4.2") {
+      exclude(group = "com.google.android.odml", module = "image")
+  }
+
+  // Guava for ListenableFuture used by CameraX
+  implementation("com.google.guava:guava:33.2.1-android")
 }
 

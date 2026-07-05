@@ -81,6 +81,22 @@ object GemmaOutputParser {
         }
     }
 
+    /**
+     * Extracts a JSON array string from [rawText].
+     *
+     * Returns an empty string if no JSON array delimiters are found.
+     */
+    fun extractJsonArray(rawText: String): String {
+        val content = extractContent(rawText)
+        val start = content.indexOf('[')
+        val end = content.lastIndexOf(']')
+        return if (start != -1 && end > start) {
+            content.substring(start, end + 1)
+        } else {
+            ""
+        }
+    }
+
     private fun sanitizeJsonObject(json: String): String {
         val result = StringBuilder(json.length)
         var inString = false

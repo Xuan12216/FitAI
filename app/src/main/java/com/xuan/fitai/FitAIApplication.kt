@@ -5,6 +5,7 @@ import com.xuan.fitai.ai.*
 import com.xuan.fitai.data.datastore.UserPreferenceStore
 import com.xuan.fitai.data.local.AppDatabase
 import com.xuan.fitai.data.repository.*
+import com.xuan.fitai.util.HealthConnectHelper
 
 class FitAIApplication : Application() {
     lateinit var database: AppDatabase
@@ -18,6 +19,7 @@ class FitAIApplication : Application() {
     lateinit var gemmaHelper: GemmaLocalHelper
     lateinit var classifierHelper: FoodClassifierHelper
     lateinit var modelManager: ModelManager
+    lateinit var healthConnectHelper: HealthConnectHelper
 
     override fun onCreate() {
         super.onCreate()
@@ -32,5 +34,6 @@ class FitAIApplication : Application() {
         gemmaHelper = GemmaLocalHelperImpl(this)
         classifierHelper = FoodClassifierHelperImpl(this)
         modelManager = ModelManager(this, modelRepository, userPreferenceStore, gemmaHelper, classifierHelper)
+        healthConnectHelper = HealthConnectHelper(this)
     }
 }
