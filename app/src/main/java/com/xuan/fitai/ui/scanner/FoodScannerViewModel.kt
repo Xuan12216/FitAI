@@ -24,9 +24,11 @@ sealed class ScannerUiState {
         val detectedLabel: String,
         val confidence: Float,
         val candidates: List<FoodClassificationResult> = emptyList(),
-        val gemmaIdentified: Boolean = false
+        val gemmaIdentified: Boolean = false,
+        val isRecognizing: Boolean = false
     ) : ScannerUiState()
     data object GemmaAnalysing : ScannerUiState()
+    data class GemmaAnalysisStreaming(val rawText: String = "") : ScannerUiState()
     data class GemmaAnalysisResult(
         val foodName: String,
         val portion: String,
@@ -79,7 +81,12 @@ class FoodScannerViewModel(
 
     fun classifyImage(bitmap: Bitmap) {
         viewModelScope.launch {
-            _uiState.value = ScannerUiState.Classifying
+            _uiState.value = ScannerUiState.EditDetails(
+                detectedLabel = "辨識中...",
+                confidence = 0f,
+                candidates = emptyList(),
+                isRecognizing = true
+            )
             try {
                 android.util.Log.d(
                     "FitAI_Scanner",
@@ -107,11 +114,21 @@ class FoodScannerViewModel(
                 // do the same when the app has just started and Gemma is still loading.
                 if (confidence < LOW_CONFIDENCE_THRESHOLD && shouldTryGemmaVision()) {
                     android.util.Log.d("FitAI_Scanner", "Trying Gemma vision fallback")
-                    _uiState.value = ScannerUiState.GemmaVisionIdentifying
                     val gemmaLabel = if (awaitGemmaVisionReady()) {
+                        val response = StringBuilder()
                         withTimeoutOrNull(GEMMA_VISION_TIMEOUT_MS) {
-                            gemmaHelper.identifyFoodFromImage(bitmap)
-                        }?.trim().orEmpty()
+                            gemmaHelper.identifyFoodFromImageFlow(bitmap).collect { token ->
+                                response.append(token)
+                                _uiState.value = ScannerUiState.EditDetails(
+                                    detectedLabel = response.toString(),
+                                    confidence = 1.0f,
+                                    candidates = results,
+                                    gemmaIdentified = true,
+                                    isRecognizing = true
+                                )
+                            }
+                        }
+                        response.toString().trim()
                     } else {
                         android.util.Log.d(
                             "FitAI_Scanner",
@@ -181,10 +198,15 @@ class FoodScannerViewModel(
                 _uiState.value = ScannerUiState.Error("Gemma AI 模型尚未載入，請先前往設定頁面載入模型")
                 return@launch
             }
-            _uiState.value = ScannerUiState.GemmaAnalysing
+            _uiState.value = ScannerUiState.GemmaAnalysisStreaming()
             try {
                 val goal = userProfile.value.goal
-                val analysis = gemmaHelper.analyzeFood(foodName, portion, goal)
+                val response = StringBuilder()
+                gemmaHelper.analyzeFoodFlow(foodName, portion, goal).collect { token ->
+                    response.append(token)
+                    _uiState.value = ScannerUiState.GemmaAnalysisStreaming(response.toString())
+                }
+                val analysis = GemmaOutputParser.parseFoodAnalysis(response.toString())
                 _uiState.value = ScannerUiState.GemmaAnalysisResult(foodName, portion, analysis)
             } catch (e: CancellationException) {
                 throw e

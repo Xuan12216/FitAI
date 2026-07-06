@@ -190,9 +190,28 @@ class MockGemmaLocalHelper : GemmaLocalHelper {
         }
     }
 
+    override fun analyzeFoodFlow(foodName: String, portion: String, goal: String): kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.flow {
+        val analysis = analyzeFood(foodName, portion, goal)
+        val reply = """
+            {"calories": ${analysis.calories}, "protein": ${analysis.protein}, "carbs": ${analysis.carbs}, "fat": ${analysis.fat}, "suitable": ${analysis.isSuitable}, "advice": "${analysis.advice}", "reasoning": "${analysis.reasoning}"}
+        """.trimIndent()
+        for (char in reply) {
+            emit(char.toString())
+            delay(10)
+        }
+    }
+
     override suspend fun identifyFoodFromImage(bitmap: android.graphics.Bitmap): String {
         delay(1200)
         val mockFoods = listOf("雞蛋", "雞胸肉", "地瓜", "香蕉", "蘋果")
         return mockFoods.random()
+    }
+
+    override fun identifyFoodFromImageFlow(bitmap: android.graphics.Bitmap): kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.flow {
+        val reply = identifyFoodFromImage(bitmap)
+        for (char in reply) {
+            emit(char.toString())
+            delay(10)
+        }
     }
 }

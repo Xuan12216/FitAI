@@ -234,6 +234,22 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
         }
     }
 
+    override fun analyzeFoodFlow(foodName: String, portion: String, goal: String): kotlinx.coroutines.flow.Flow<String> {
+        val prompt = """
+            You are a professional nutritionist. The user's goal is: $goal. The user just scanned: $foodName (portion: $portion).
+            Estimate its calorie count (kcal) and macronutrients (protein, carbs, fat in grams) using common Taiwan restaurant/brand nutrition references when recognizable.
+            First infer the exact food items, quantity, and serving size from the name. For composite meals, estimate each item separately and sum them.
+            Keep calories consistent with macros: calories should be close to protein*4 + carbs*4 + fat*9.
+            Do not confuse a single item with a combo meal. Do not invent extremely high calories unless the portion clearly indicates multiple servings.
+            Before finalizing, self-check: if calories differ from protein*4 + carbs*4 + fat*9 by more than 20%, revise the macros or calories so they are consistent.
+            If unsure about portion size, state the assumed portion briefly in reasoning and use a conservative common serving estimate.
+            Provide your response in JSON format matching this structure:
+            {"calories": 150.0, "protein": 10.0, "carbs": 12.0, "fat": 3.0, "suitable": true, "advice": "Concise advice in Traditional Chinese.", "reasoning": "Short estimate basis in Traditional Chinese."}
+            Output ONLY one raw JSON object. Do not use markdown fences. Keep advice and reasoning each under 40 Traditional Chinese characters.
+        """.trimIndent()
+        return generateReplyFlow(prompt)
+    }
+
     override suspend fun identifyFoodFromImage(bitmap: Bitmap): String = withContext(Dispatchers.IO) {
         val inference = beginInference("identifyFoodFromImage", "bitmap=${bitmap.width}x${bitmap.height}")
         var locked = false
@@ -284,6 +300,57 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             finishInference(inference)
         }
     }
+
+    override fun identifyFoodFromImageFlow(bitmap: Bitmap): kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.flow {
+        val inference = beginInference("identifyFoodFromImageFlow", "bitmap=${bitmap.width}x${bitmap.height}")
+        var locked = false
+        try {
+            android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} waiting for modelMutex")
+            modelMutex.lock()
+            locked = true
+            android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} mutex acquired")
+            val currentConversation = createConversationForInference(inference)
+                ?: throw IllegalStateException("Gemma model is not loaded")
+
+            val outputStream = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
+            val imageBytes = outputStream.toByteArray()
+
+            val imageContent = Content.ImageBytes(imageBytes)
+            val textContent = Content.Text(
+                "Identify the main food in this image. Output one concise Traditional Chinese food name only. " +
+                    "If no food is visible, output 無食物."
+            )
+
+            @Suppress("UNCHECKED_CAST")
+            val contentsConstructor = Contents::class.java.getDeclaredConstructor(List::class.java)
+            contentsConstructor.isAccessible = true
+            val contents = contentsConstructor.newInstance(
+                listOf<Content>(imageContent, textContent)
+            ) as Contents
+
+            var tokenCount = 0
+            currentConversation.sendMessageAsync(contents).collect { token ->
+                tokenCount += 1
+                emit(token.toString())
+            }
+            android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} completed visionFlow tokens=$tokenCount")
+        } catch (e: CancellationException) {
+            android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} cancelled inside identifyFoodFromImageFlow: ${e.message}")
+            resetConversationAfterCancelledInference(inference)
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.e("FitAI_GemmaReq", "GemmaInference#${inference.id} identifyFoodFromImageFlow failed", e)
+            resetReusableConversationIfRecoverableSessionError(inference, e)
+            throw e
+        } finally {
+            if (locked) {
+                modelMutex.unlock()
+                android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} mutex released")
+            }
+            finishInference(inference)
+        }
+    }.flowOn(Dispatchers.IO)
 
     private suspend fun beginInference(type: String, promptOrDetail: String): InferenceRequest {
         val currentJob = currentCoroutineContext()[Job]

@@ -9,8 +9,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -257,7 +259,11 @@ fun FoodScannerScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
-                            CircularProgressIndicator()
+                            Text(
+                                text = "影像辨識結果",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
                             Spacer(modifier = Modifier.height(16.dp))
                             Text("本地影像分類模型分析中...")
                         }
@@ -268,7 +274,11 @@ fun FoodScannerScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
-                            CircularProgressIndicator(color = MaterialTheme.colorScheme.tertiary)
+                            Text(
+                                text = "影像辨識結果",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
                                 text = "✨ Gemma 4 視覚辨識中...",
@@ -285,7 +295,7 @@ fun FoodScannerScreen(
                         }
                     }
                     is ScannerUiState.EditDetails -> {
-                        var foodName by remember { mutableStateOf(GemmaOutputParser.extractContent(state.detectedLabel)) }
+                        var foodName by remember { mutableStateOf("") }
                         var portion by remember { mutableStateOf("1份") }
 
                         Column(
@@ -298,6 +308,8 @@ fun FoodScannerScreen(
                         ) {
                             // Title with Gemma badge if identified by vision
                             if (state.gemmaIdentified) {
+                                val detectedFoodName = GemmaOutputParser.extractContent(state.detectedLabel).trim()
+                                val thinkingText = GemmaOutputParser.extractThinking(state.detectedLabel)
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -315,13 +327,35 @@ fun FoodScannerScreen(
                                         )
                                     )
                                 }
-                                ThinkingContent(
-                                    rawText = state.detectedLabel,
-                                    contentTextStyle = MaterialTheme.typography.bodyMedium.copy(
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.tertiary
+                                if (!thinkingText.isNullOrBlank()) {
+                                    ThinkingContent(
+                                        rawText = GemmaOutputParser.withThinkingContent(thinkingText, ""),
+                                        contentTextStyle = MaterialTheme.typography.bodyMedium.copy(
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.tertiary
+                                        ),
+                                        isGenerating = state.isRecognizing
                                     )
-                                )
+                                }
+                                if (detectedFoodName.isNotBlank()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.Start)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f))
+                                            .clickable(enabled = !state.isRecognizing) {
+                                                foodName = detectedFoodName
+                                            }
+                                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                                    ) {
+                                        Text(
+                                            text = detectedFoodName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                                        )
+                                    }
+                                }
                             } else {
                                 Text(
                                     text = "影像辨識結果",
@@ -346,7 +380,7 @@ fun FoodScannerScreen(
                                 ) {
                                     Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                                         Text(
-                                            text = "候選結果 (點選直接修改名稱)：",
+                                            text = "FoodModifier 模型辨識結果",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.align(Alignment.Start)
@@ -376,7 +410,13 @@ fun FoodScannerScreen(
                                 value = foodName,
                                 onValueChange = { foodName = it },
                                 label = { Text("確認食物名稱") },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                isError = !state.isRecognizing && foodName.isBlank(),
+                                supportingText = {
+                                    if (!state.isRecognizing && foodName.isBlank()) {
+                                        Text("請輸入食物名稱或點選候選結果")
+                                    }
+                                }
                             )
 
                             OutlinedTextField(
@@ -388,9 +428,11 @@ fun FoodScannerScreen(
 
                             Spacer(modifier = Modifier.height(24.dp))
 
+                            val canAnalyze = !state.isRecognizing && foodName.isNotBlank()
                             Button(
-                                onClick = { viewModel.analyzeWithGemma(foodName, portion) },
-                                modifier = Modifier.fillMaxWidth().height(48.dp)
+                                onClick = { viewModel.analyzeWithGemma(foodName.trim(), portion) },
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                                enabled = canAnalyze
                             ) {
                                 Text("送出給本地 Gemma 分析")
                             }
@@ -400,6 +442,33 @@ fun FoodScannerScreen(
                                 modifier = Modifier.fillMaxWidth().height(48.dp)
                             ) {
                                 Text("重新拍照")
+                            }
+                        }
+                    }
+                    is ScannerUiState.GemmaAnalysisStreaming -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(24.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Text(
+                                text = "Gemma AI 分析中",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                            )
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    ThinkingContent(
+                                        rawText = state.rawText.ifBlank { "正在產生營養分析..." },
+                                        isGenerating = true
+                                    )
+                                }
                             }
                         }
                     }

@@ -13,7 +13,9 @@ interface GemmaLocalHelper {
     suspend fun generateReply(prompt: String): String
     fun generateReplyFlow(prompt: String): kotlinx.coroutines.flow.Flow<String>
     suspend fun analyzeFood(foodName: String, portion: String, goal: String): GemmaFoodAnalysis
+    fun analyzeFoodFlow(foodName: String, portion: String, goal: String): kotlinx.coroutines.flow.Flow<String>
     suspend fun identifyFoodFromImage(bitmap: Bitmap): String
+    fun identifyFoodFromImageFlow(bitmap: Bitmap): kotlinx.coroutines.flow.Flow<String>
 }
 
 data class GemmaFoodAnalysis(

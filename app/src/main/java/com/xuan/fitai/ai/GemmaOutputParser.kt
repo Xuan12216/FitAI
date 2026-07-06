@@ -183,6 +183,35 @@ object GemmaOutputParser {
         )
     }
 
+    fun parseFoodAnalysis(rawText: String): GemmaFoodAnalysis {
+        val thinkingText = extractThinking(rawText)
+        return try {
+            val cleanReply = extractJson(rawText)
+            val json = org.json.JSONObject(cleanReply)
+            GemmaFoodAnalysis(
+                calories = json.optDouble("calories", 150.0).toFloat(),
+                protein = json.optDouble("protein", 10.0).toFloat(),
+                carbs = json.optDouble("carbs", 12.0).toFloat(),
+                fat = json.optDouble("fat", 3.0).toFloat(),
+                isSuitable = json.optBoolean("suitable", true),
+                advice = json.optString("advice", "AI 已完成營養估算，請依實際份量微調。"),
+                reasoning = json.optString("reasoning", "依常見食物份量與營養比例估算。"),
+                thinking = thinkingText
+            )
+        } catch (e: Exception) {
+            extractPartialFoodAnalysis(rawText, thinkingText) ?: GemmaFoodAnalysis(
+                calories = 200f,
+                protein = 8f,
+                carbs = 20f,
+                fat = 6f,
+                isSuitable = true,
+                advice = "Gemma 回覆格式不完整，已提供保守估算。",
+                reasoning = "無法完整解析 JSON，請確認食物名稱與份量。",
+                thinking = thinkingText
+            )
+        }
+    }
+
     private fun extractNumber(text: String, key: String): Float? {
         val regex = Regex("\"$key\"\\s*:\\s*(-?\\d+(?:\\.\\d+)?)")
         return regex.find(text)?.groupValues?.getOrNull(1)?.toFloatOrNull()
