@@ -24,12 +24,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.xuan.fitai.data.model.LocalModelInfo
 import com.xuan.fitai.data.model.ModelDownloadState
 import com.xuan.fitai.data.model.ModelLoadState
 import com.xuan.fitai.data.model.ModelType
+import com.xuan.fitai.ui.components.LoadingDialog
 import com.xuan.fitai.ui.components.ModelStatusCard
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -144,44 +143,10 @@ fun ModelSetupScreen(
     }
 
     if (isApplyingModelConfig) {
-        ModelConfigLoadingDialog()
-    }
-}
-
-@Composable
-private fun ModelConfigLoadingDialog() {
-    Dialog(
-        onDismissRequest = {},
-        properties = DialogProperties(
-            dismissOnBackPress = false,
-            dismissOnClickOutside = false,
+        LoadingDialog(
+            title = "套用模型設定",
+            message = "正在重新載入本地 Gemma 模型..."
         )
-    ) {
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            tonalElevation = 6.dp,
-            color = MaterialTheme.colorScheme.surface
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 28.dp, vertical = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                CircularProgressIndicator(modifier = Modifier.size(48.dp))
-                Text(
-                    text = "套用模型設定",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "正在重新載入本地 Gemma 模型...",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
     }
 }
 
