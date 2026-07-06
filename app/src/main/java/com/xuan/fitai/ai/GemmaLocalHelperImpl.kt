@@ -532,7 +532,7 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             "thinking_token_budget" to (if (thinking) 256 else 0)
         )
 
-        android.util.Log.d("FitAI_Diag TestXuan", extra.toString())
+        android.util.Log.d("FitAI_Diag", extra.toString())
 
         return ConversationConfig(
             systemInstructionContents,

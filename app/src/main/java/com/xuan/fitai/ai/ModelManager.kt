@@ -113,6 +113,7 @@ class ModelManager(
             ?: downloadedLlms.firstOrNull { it.localPath == selectedLlmPath }
             ?: downloadedLlms.firstOrNull()
         if (preferredLlm != null) {
+            rememberSelectedModel(preferredLlm)
             gemmaHelper.loadModelSync(preferredLlm.localPath, preferredLlm.name)
         }
     }

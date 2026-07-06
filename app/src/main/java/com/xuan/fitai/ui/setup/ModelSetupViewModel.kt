@@ -108,26 +108,37 @@ class ModelSetupViewModel(
         viewModelScope.launch {
             _isApplyingModelConfig.value = true
             try {
-                android.util.Log.d("FitAI_Diag TestXuan", "saveModelConfig requested enableThinking=$enableThinking")
+                android.util.Log.d("FitAI_Diag", "saveModelConfig requested enableThinking=$enableThinking")
                 userPreferenceStore.saveModelConfig(
                     maxTokens, topK, topP, temperature, useGpu, enableThinking, enableSpeculative, systemPrompt
                 )
                 val savedEnableThinking = userPreferenceStore.enableThinkingFlow.first()
-                android.util.Log.d("FitAI_Diag TestXuan", "saveModelConfig saved enableThinking=$savedEnableThinking")
+                android.util.Log.d("FitAI_Diag", "saveModelConfig saved enableThinking=$savedEnableThinking")
 
                 val selectedLlmModelId = userPreferenceStore.selectedLlmModelIdFlow.first()
                 val selectedLlmPath = userPreferenceStore.selectedLlmPathFlow.first()
+                val currentLoadedModelName = modelManager.gemmaHelper.loadedModelName.value
                 val models = modelRepository.allModels.first()
                 val selectedModel = selectedLlmModelId?.let { modelRepository.getModelById(it) }
                     ?: models.firstOrNull { model ->
                         model.type == ModelType.LLM && model.localPath == selectedLlmPath
                     }
+                    ?: models.firstOrNull { model ->
+                        model.type == ModelType.LLM && model.name == currentLoadedModelName
+                    }
+                    ?: models.firstOrNull { model ->
+                        model.type == ModelType.LLM && model.isDownloaded
+                    }
 
                 if (selectedModel != null && selectedModel.type == ModelType.LLM && selectedModel.isDownloaded) {
-                    android.util.Log.d("FitAI_Diag TestXuan", "saveModelConfig reload via loadModelSync model=${selectedModel.id}")
+                    android.util.Log.d("FitAI_Diag", "saveModelConfig reload via loadModelSync model=${selectedModel.id}")
+                    rememberSelectedModel(selectedModel)
                     modelManager.gemmaHelper.loadModelSync(selectedModel.localPath, selectedModel.name)
                 } else {
-                    android.util.Log.d("FitAI_Diag TestXuan", "saveModelConfig skip loadModelSync selectedModel=${selectedModel?.id}")
+                    android.util.Log.d(
+                        "FitAI_Diag",
+                        "saveModelConfig skip loadModelSync selectedModel=${selectedModel?.id}, selectedId=$selectedLlmModelId, selectedPath=$selectedLlmPath, loadedName=$currentLoadedModelName"
+                    )
                 }
             } finally {
                 _isApplyingModelConfig.value = false
