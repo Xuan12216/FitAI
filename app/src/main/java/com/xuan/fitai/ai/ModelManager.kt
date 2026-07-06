@@ -1,16 +1,20 @@
 package com.xuan.fitai.ai
 
 import android.content.Context
+import android.content.Intent
+import androidx.core.content.ContextCompat
 import com.xuan.fitai.data.datastore.UserPreferenceStore
 import com.xuan.fitai.data.model.LocalModelInfo
 import com.xuan.fitai.data.model.ModelDownloadState
 import com.xuan.fitai.data.model.ModelType
 import com.xuan.fitai.data.repository.ModelRepository
+import com.xuan.fitai.service.ModelDownloadService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import java.io.File
 
 class ModelManager(
@@ -21,6 +25,8 @@ class ModelManager(
     val classifierHelper: FoodClassifierHelper
 ) {
     private val downloader = ModelDownloader()
+    private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val activeDownloadJobs = mutableMapOf<String, Job>()
 
     private val _downloadStates = MutableStateFlow<Map<String, ModelDownloadState>>(emptyMap())
     val downloadStates: StateFlow<Map<String, ModelDownloadState>> = _downloadStates.asStateFlow()
@@ -111,29 +117,55 @@ class ModelManager(
         }
     }
 
-    suspend fun downloadModel(modelId: String, token: String?, onComplete: suspend () -> Unit = {}) {
-        val model = modelRepository.getModelById(modelId) ?: return
-        val destinationFile = File(model.localPath)
+    fun downloadModel(modelId: String, token: String?) {
+        val intent = Intent(context, ModelDownloadService::class.java).apply {
+            putExtra(ModelDownloadService.EXTRA_MODEL_ID, modelId)
+            putExtra(ModelDownloadService.EXTRA_TOKEN, token)
+        }
+        ContextCompat.startForegroundService(context, intent)
+    }
 
-        _downloadStates.value = _downloadStates.value + (modelId to ModelDownloadState.Idle)
+    fun downloadModelInBackground(modelId: String, token: String?) {
+        synchronized(activeDownloadJobs) {
+            if (activeDownloadJobs[modelId]?.isActive == true) return
+        }
 
-        downloader.downloadModel(
-            url = model.sourceUrl ?: "",
-            token = token,
-            destinationFile = destinationFile,
-            onProgress = { state ->
-                _downloadStates.value = _downloadStates.value + (modelId to state)
-                if (state is ModelDownloadState.Completed) {
-                    val updatedModel = model.copy(isDownloaded = true)
-                    kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                        modelRepository.updateModel(updatedModel)
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                            onComplete()
-                        }
+        _downloadStates.update { it + (modelId to ModelDownloadState.Idle) }
+
+        val job = managerScope.launch(start = CoroutineStart.LAZY) {
+            val model = modelRepository.getModelById(modelId) ?: run {
+                _downloadStates.update { it + (modelId to ModelDownloadState.Failed("Model metadata not found")) }
+                return@launch
+            }
+            val destinationFile = File(model.localPath)
+
+            try {
+                downloader.downloadModel(
+                    url = model.sourceUrl ?: "",
+                    token = token,
+                    destinationFile = destinationFile,
+                    onProgress = { state ->
+                        _downloadStates.update { it + (modelId to state) }
                     }
+                )
+
+                if (_downloadStates.value[modelId] is ModelDownloadState.Completed) {
+                    val updatedModel = model.copy(isDownloaded = true)
+                    modelRepository.updateModel(updatedModel)
+                    rememberSelectedModel(updatedModel)
+                    loadModel(updatedModel)
+                }
+            } finally {
+                synchronized(activeDownloadJobs) {
+                    activeDownloadJobs.remove(modelId)
                 }
             }
-        )
+        }
+
+        synchronized(activeDownloadJobs) {
+            activeDownloadJobs[modelId] = job
+        }
+        job.start()
     }
 
     fun loadModel(model: LocalModelInfo) {
@@ -145,8 +177,7 @@ class ModelManager(
         if (model.fileSizeBytes > 0 && file.length() != model.fileSizeBytes) {
             android.util.Log.w("FitAI_Diag", "Model file size mismatch! Expected ${model.fileSizeBytes}, got ${file.length()}. Deleting corrupted file...")
             file.delete()
-            @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
-            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            managerScope.launch {
                 modelRepository.updateModel(model.copy(isDownloaded = false))
             }
             return
@@ -182,5 +213,16 @@ class ModelManager(
         
         val updated = model.copy(isDownloaded = true)
         modelRepository.updateModel(updated)
+    }
+
+    private suspend fun rememberSelectedModel(model: LocalModelInfo) {
+        when (model.type) {
+            ModelType.LLM -> {
+                userPreferenceStore.saveSelectedLlmModelId(model.id)
+                userPreferenceStore.saveSelectedLlmPath(model.localPath)
+            }
+            ModelType.FOOD_CLASSIFIER -> userPreferenceStore.saveSelectedClassifierPath(model.localPath)
+            else -> Unit
+        }
     }
 }

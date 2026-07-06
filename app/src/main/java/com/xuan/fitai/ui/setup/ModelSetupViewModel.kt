@@ -77,17 +77,7 @@ class ModelSetupViewModel(
 
     fun downloadModel(modelId: String) {
         val token = if (modelId == "gemma") hfToken.value else null
-        viewModelScope.launch {
-            modelManager.downloadModel(modelId, token) {
-                // Once download completes, auto-load it
-                viewModelScope.launch {
-                    val model = modelRepository.getModelById(modelId)
-                    if (model != null) {
-                        loadModel(model)
-                    }
-                }
-            }
-        }
+        modelManager.downloadModel(modelId, token)
     }
 
     fun loadModel(model: LocalModelInfo) {
