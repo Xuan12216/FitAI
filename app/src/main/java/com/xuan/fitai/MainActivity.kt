@@ -7,8 +7,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,7 +20,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,7 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.xuan.fitai.data.model.ModelLoadState
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.xuan.fitai.theme.FitAITheme
 
 class MainActivity : ComponentActivity() {
@@ -45,8 +43,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             FitAITheme {
                 var startupInitializing by remember { mutableStateOf(true) }
-                val gemmaLoadState by app.gemmaHelper.loadState.collectAsState()
-                val classifierLoadState by app.classifierHelper.loadState.collectAsState()
 
                 LaunchedEffect(Unit) {
                     try {
@@ -56,21 +52,12 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                val isModelLoading = gemmaLoadState is ModelLoadState.Loading ||
-                    classifierLoadState is ModelLoadState.Loading
-
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    if (startupInitializing || isModelLoading) {
-                        StartupLoadingScreen(
-                            message = when {
-                                gemmaLoadState is ModelLoadState.Loading -> "正在載入本地 AI 模型..."
-                                classifierLoadState is ModelLoadState.Loading -> "正在載入食物辨識模型..."
-                                else -> "正在初始化 FitAI..."
-                            }
-                        )
+                    if (startupInitializing) {
+                        StartupLoadingScreen(message = "Starting FitAI...")
                     } else {
                         MainNavigation()
                     }
@@ -122,7 +109,7 @@ private fun StartupLoadingScreen(message: String) {
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "首次載入可能需要幾秒鐘",
+                text = "Preparing your local AI experience.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

@@ -18,6 +18,8 @@ class ModelSetupViewModel(
     private val userPreferenceStore: UserPreferenceStore,
     private val modelManager: ModelManager
 ) : ViewModel() {
+    private val _isApplyingModelConfig = MutableStateFlow(false)
+    val isApplyingModelConfig: StateFlow<Boolean> = _isApplyingModelConfig.asStateFlow()
 
     val allModels: StateFlow<List<LocalModelInfo>> = modelRepository.allModels
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -34,34 +36,28 @@ class ModelSetupViewModel(
 
     // Configuration flows
     val maxTokens: StateFlow<Int> = userPreferenceStore.maxTokensFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 4000)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 4000)
 
     val topK: StateFlow<Int> = userPreferenceStore.topKFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 64)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 64)
 
     val topP: StateFlow<Float> = userPreferenceStore.topPFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.95f)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0.95f)
 
     val temperature: StateFlow<Float> = userPreferenceStore.temperatureFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1.0f)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 1.0f)
 
     val useGpu: StateFlow<Boolean> = userPreferenceStore.useGpuFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val enableThinking: StateFlow<Boolean> = userPreferenceStore.enableThinkingFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val enableSpeculative: StateFlow<Boolean> = userPreferenceStore.enableSpeculativeFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val systemPrompt: StateFlow<String> = userPreferenceStore.systemPromptFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "你是一個專業的健康與營養顧問。請用繁體中文回答。")
-
-    init {
-        viewModelScope.launch {
-            modelManager.initializeDefaultModels()
-        }
-    }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, "你是一個專業的健康與營養顧問。請用繁體中文回答。")
 
     fun saveToken(token: String) {
         viewModelScope.launch {
@@ -110,16 +106,31 @@ class ModelSetupViewModel(
         systemPrompt: String
     ) {
         viewModelScope.launch {
-            userPreferenceStore.saveModelConfig(
-                maxTokens, topK, topP, temperature, useGpu, enableThinking, enableSpeculative, systemPrompt
-            )
-            // Reload active LLM model to apply config immediately if loaded
-            val selectedLlmModelId = userPreferenceStore.selectedLlmModelIdFlow.first()
-            if (selectedLlmModelId != null) {
-                val model = modelRepository.getModelById(selectedLlmModelId)
-                if (model != null && model.isDownloaded) {
-                    modelManager.loadModel(model)
+            _isApplyingModelConfig.value = true
+            try {
+                android.util.Log.d("FitAI_Diag TestXuan", "saveModelConfig requested enableThinking=$enableThinking")
+                userPreferenceStore.saveModelConfig(
+                    maxTokens, topK, topP, temperature, useGpu, enableThinking, enableSpeculative, systemPrompt
+                )
+                val savedEnableThinking = userPreferenceStore.enableThinkingFlow.first()
+                android.util.Log.d("FitAI_Diag TestXuan", "saveModelConfig saved enableThinking=$savedEnableThinking")
+
+                val selectedLlmModelId = userPreferenceStore.selectedLlmModelIdFlow.first()
+                val selectedLlmPath = userPreferenceStore.selectedLlmPathFlow.first()
+                val models = modelRepository.allModels.first()
+                val selectedModel = selectedLlmModelId?.let { modelRepository.getModelById(it) }
+                    ?: models.firstOrNull { model ->
+                        model.type == ModelType.LLM && model.localPath == selectedLlmPath
+                    }
+
+                if (selectedModel != null && selectedModel.type == ModelType.LLM && selectedModel.isDownloaded) {
+                    android.util.Log.d("FitAI_Diag TestXuan", "saveModelConfig reload via loadModelSync model=${selectedModel.id}")
+                    modelManager.gemmaHelper.loadModelSync(selectedModel.localPath, selectedModel.name)
+                } else {
+                    android.util.Log.d("FitAI_Diag TestXuan", "saveModelConfig skip loadModelSync selectedModel=${selectedModel?.id}")
                 }
+            } finally {
+                _isApplyingModelConfig.value = false
             }
         }
     }

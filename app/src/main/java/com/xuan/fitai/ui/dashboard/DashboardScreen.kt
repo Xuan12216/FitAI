@@ -1,9 +1,5 @@
 package com.xuan.fitai.ui.dashboard
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -21,8 +17,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.xuan.fitai.ai.GemmaOutputParser
-import com.xuan.fitai.data.model.Meal
-import com.xuan.fitai.data.model.UserProfile
 import com.xuan.fitai.ui.components.NutritionProgressCard
 import com.xuan.fitai.ui.components.ThinkingContent
 

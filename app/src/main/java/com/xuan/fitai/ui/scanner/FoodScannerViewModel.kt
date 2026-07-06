@@ -11,6 +11,7 @@ import com.xuan.fitai.data.model.UserProfile
 import com.xuan.fitai.data.repository.MealRepository
 import com.xuan.fitai.data.repository.UserRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -54,6 +55,7 @@ class FoodScannerViewModel(
 
     val classifierLoadState = classifierHelper.loadState
     val gemmaLoadState = gemmaHelper.loadState
+    val gemmaVisionReady = gemmaHelper.visionReady
 
     private val _uiState = MutableStateFlow<ScannerUiState>(ScannerUiState.CameraPreview)
     val uiState: StateFlow<ScannerUiState> = _uiState.asStateFlow()
@@ -62,30 +64,62 @@ class FoodScannerViewModel(
         _uiState.value = ScannerUiState.CameraPreview
     }
 
+    fun loadFoodClassifierIfNeeded(modelPath: String) {
+        val state = classifierLoadState.value
+        if (state == ModelLoadState.Loaded || state == ModelLoadState.Loading) return
+
+        android.util.Log.d(
+            "FitAI_Scanner",
+            "Loading food classifier for scanner: state=$state, path=$modelPath"
+        )
+        viewModelScope.launch(Dispatchers.IO) {
+            classifierHelper.loadModel(modelPath)
+        }
+    }
+
     fun classifyImage(bitmap: Bitmap) {
         viewModelScope.launch {
             _uiState.value = ScannerUiState.Classifying
             try {
+                android.util.Log.d(
+                    "FitAI_Scanner",
+                    "classifyImage start bitmap=${bitmap.width}x${bitmap.height}, classifier=${classifierLoadState.value}, gemma=${gemmaLoadState.value}, visionReady=${gemmaHelper.visionReady.value}"
+                )
+
                 // Run classifier if model loaded, otherwise fall through to Gemma vision
                 val results = if (classifierLoadState.value == ModelLoadState.Loaded) {
+                    android.util.Log.d("FitAI_Scanner", "Running FoodClassifierHelper.classifyImage")
                     classifierHelper.classifyImage(bitmap)
-                } else emptyList()
+                } else {
+                    android.util.Log.d("FitAI_Scanner", "Skipping food classifier because state=${classifierLoadState.value}")
+                    emptyList()
+                }
 
                 val bestResult = results.firstOrNull()
                 val confidence = bestResult?.confidence ?: 0f
+                android.util.Log.d(
+                    "FitAI_Scanner",
+                    "classifier results=${results.size}, best=${bestResult?.label}, confidence=$confidence"
+                )
 
                 // If confidence < 60% or no result, try Gemma vision identification.
                 // Gallery waits until the model instance is initialized before inference;
                 // do the same when the app has just started and Gemma is still loading.
                 if (confidence < LOW_CONFIDENCE_THRESHOLD && shouldTryGemmaVision()) {
+                    android.util.Log.d("FitAI_Scanner", "Trying Gemma vision fallback")
                     _uiState.value = ScannerUiState.GemmaVisionIdentifying
                     val gemmaLabel = if (awaitGemmaVisionReady()) {
                         withTimeoutOrNull(GEMMA_VISION_TIMEOUT_MS) {
                             gemmaHelper.identifyFoodFromImage(bitmap)
                         }?.trim().orEmpty()
                     } else {
+                        android.util.Log.d(
+                            "FitAI_Scanner",
+                            "Gemma vision not ready after wait: gemma=${gemmaLoadState.value}, visionReady=${gemmaHelper.visionReady.value}"
+                        )
                         ""
                     }
+                    android.util.Log.d("FitAI_Scanner", "Gemma vision label=$gemmaLabel")
 
                     if (gemmaLabel.isNotBlank() && gemmaLabel != MANUAL_FOOD_LABEL) {
                         _uiState.value = ScannerUiState.EditDetails(

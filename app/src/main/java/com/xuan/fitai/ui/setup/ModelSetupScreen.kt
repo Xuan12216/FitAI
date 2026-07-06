@@ -24,6 +24,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.xuan.fitai.data.model.LocalModelInfo
 import com.xuan.fitai.data.model.ModelDownloadState
 import com.xuan.fitai.data.model.ModelLoadState
@@ -42,6 +44,7 @@ fun ModelSetupScreen(
     val gemmaLoadState by viewModel.gemmaLoadState.collectAsState()
     val classifierLoadState by viewModel.classifierLoadState.collectAsState()
     val loadedModelName by viewModel.loadedModelName.collectAsState()
+    val isApplyingModelConfig by viewModel.isApplyingModelConfig.collectAsState()
 
     val scrollState = rememberScrollState()
     var selectedModelIdForImport by remember { mutableStateOf<String?>(null) }
@@ -139,6 +142,47 @@ fun ModelSetupScreen(
             onDismiss = { showConfigDialog = false }
         )
     }
+
+    if (isApplyingModelConfig) {
+        ModelConfigLoadingDialog()
+    }
+}
+
+@Composable
+private fun ModelConfigLoadingDialog() {
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+        )
+    ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            tonalElevation = 6.dp,
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 28.dp, vertical = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(48.dp))
+                Text(
+                    text = "套用模型設定",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "正在重新載入本地 Gemma 模型...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -155,14 +199,14 @@ fun ModelConfigDialog(
     val speculativePref by viewModel.enableSpeculative.collectAsState()
     val systemPromptPref by viewModel.systemPrompt.collectAsState()
 
-    var maxTokens by remember(maxTokensPref) { mutableStateOf(maxTokensPref) }
-    var topK by remember(topKPref) { mutableStateOf(topKPref) }
-    var topP by remember(topPPref) { mutableStateOf(topPPref) }
-    var temp by remember(tempPref) { mutableStateOf(tempPref) }
-    var useGpu by remember(useGpuPref) { mutableStateOf(useGpuPref) }
-    var thinking by remember(thinkingPref) { mutableStateOf(thinkingPref) }
-    var speculative by remember(speculativePref) { mutableStateOf(speculativePref) }
-    var systemPrompt by remember(systemPromptPref) { mutableStateOf(systemPromptPref) }
+    var maxTokens by remember { mutableStateOf(maxTokensPref) }
+    var topK by remember { mutableStateOf(topKPref) }
+    var topP by remember { mutableStateOf(topPPref) }
+    var temp by remember { mutableStateOf(tempPref) }
+    var useGpu by remember { mutableStateOf(useGpuPref) }
+    var thinking by remember { mutableStateOf(thinkingPref) }
+    var speculative by remember { mutableStateOf(speculativePref) }
+    var systemPrompt by remember { mutableStateOf(systemPromptPref) }
 
     var selectedTab by remember { mutableStateOf(0) }
 

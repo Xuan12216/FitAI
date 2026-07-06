@@ -6,7 +6,6 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.xuan.fitai.FitAIApplication
@@ -17,13 +16,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 class ModelDownloadService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private var monitorJob: Job? = null
+    private val monitorJobs = mutableMapOf<String, Job>()
+    private var hasForegroundNotification = false
     private lateinit var notificationManager: NotificationManager
 
     override fun onCreate() {
@@ -38,77 +40,85 @@ class ModelDownloadService : Service() {
         val notificationId = notificationIdFor(modelId)
         val app = application as FitAIApplication
 
-        startForeground(
-            notificationId,
-            buildNotification(
-                title = "Model download",
-                text = "Preparing model download...",
-                progress = 0,
-                indeterminate = true,
-                ongoing = true
-            )
+        val initialNotification = buildNotification(
+            title = "Model download",
+            text = "$modelId: preparing download...",
+            progress = 0,
+            indeterminate = true,
+            ongoing = true
         )
 
-        monitorJob?.cancel()
-        monitorJob = serviceScope.launch {
-            app.modelManager.downloadStates.collectLatest { states ->
-                val state = states[modelId] ?: return@collectLatest
-                when (state) {
-                    is ModelDownloadState.Downloading -> {
-                        val progress = (state.progress * 100).toInt().coerceIn(0, 100)
-                        notificationManager.notify(
-                            notificationId,
-                            buildNotification(
-                                title = "Model download",
-                                text = "$progress% (${state.downloadedBytes.toMb()}MB / ${state.totalBytes.toMb()}MB)",
-                                progress = progress,
-                                indeterminate = state.totalBytes <= 0,
-                                ongoing = true
+        if (!hasForegroundNotification) {
+            startForeground(notificationId, initialNotification)
+            hasForegroundNotification = true
+        } else {
+            notificationManager.notify(notificationId, initialNotification)
+        }
+
+        if (monitorJobs[modelId]?.isActive != true) {
+            monitorJobs[modelId] = serviceScope.launch {
+                app.modelManager.downloadStates.collect { states ->
+                    val state = states[modelId] ?: return@collect
+                    when (state) {
+                        is ModelDownloadState.Downloading -> {
+                            val progress = (state.progress * 100).toInt().coerceIn(0, 100)
+                            notificationManager.notify(
+                                notificationId,
+                                buildNotification(
+                                    title = "Model download",
+                                    text = "$modelId: $progress% (${state.downloadedBytes.toMb()}MB / ${state.totalBytes.toMb()}MB)",
+                                    progress = progress,
+                                    indeterminate = state.totalBytes <= 0,
+                                    ongoing = true
+                                )
                             )
-                        )
-                    }
-                    ModelDownloadState.Completed -> {
-                        notificationManager.notify(
-                            notificationId,
-                            buildNotification(
-                                title = "Model download complete",
-                                text = "The model has been downloaded and loaded.",
-                                progress = 100,
-                                indeterminate = false,
-                                ongoing = false
+                        }
+                        ModelDownloadState.Completed -> {
+                            notificationManager.notify(
+                                notificationId,
+                                buildNotification(
+                                    title = "Model download complete",
+                                    text = "$modelId has been downloaded. Load it from Model Management when needed.",
+                                    progress = 100,
+                                    indeterminate = false,
+                                    ongoing = false
+                                )
                             )
-                        )
-                        delay(1500)
-                        stopSelf(startId)
-                    }
-                    is ModelDownloadState.Failed -> {
-                        notificationManager.notify(
-                            notificationId,
-                            buildNotification(
-                                title = "Model download failed",
-                                text = state.message,
-                                progress = 0,
-                                indeterminate = false,
-                                ongoing = false
+                            delay(1500)
+                            finishMonitoring(modelId)
+                            currentCoroutineContext().cancel()
+                        }
+                        is ModelDownloadState.Failed -> {
+                            notificationManager.notify(
+                                notificationId,
+                                buildNotification(
+                                    title = "Model download failed",
+                                    text = "$modelId: ${state.message}",
+                                    progress = 0,
+                                    indeterminate = false,
+                                    ongoing = false
+                                )
                             )
-                        )
-                        delay(3000)
-                        stopSelf(startId)
-                    }
-                    ModelDownloadState.Cancelled -> {
-                        notificationManager.notify(
-                            notificationId,
-                            buildNotification(
-                                title = "Model download cancelled",
-                                text = "The download was stopped.",
-                                progress = 0,
-                                indeterminate = false,
-                                ongoing = false
+                            delay(3000)
+                            finishMonitoring(modelId)
+                            currentCoroutineContext().cancel()
+                        }
+                        ModelDownloadState.Cancelled -> {
+                            notificationManager.notify(
+                                notificationId,
+                                buildNotification(
+                                    title = "Model download cancelled",
+                                    text = "$modelId download was stopped.",
+                                    progress = 0,
+                                    indeterminate = false,
+                                    ongoing = false
+                                )
                             )
-                        )
-                        stopSelf(startId)
+                            finishMonitoring(modelId)
+                            currentCoroutineContext().cancel()
+                        }
+                        ModelDownloadState.Idle -> Unit
                     }
-                    ModelDownloadState.Idle -> Unit
                 }
             }
         }
@@ -118,11 +128,20 @@ class ModelDownloadService : Service() {
     }
 
     override fun onDestroy() {
-        monitorJob?.cancel()
+        monitorJobs.values.forEach { it.cancel() }
+        monitorJobs.clear()
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun finishMonitoring(modelId: String) {
+        monitorJobs.remove(modelId)
+        if (monitorJobs.isEmpty()) {
+            hasForegroundNotification = false
+            stopSelf()
+        }
+    }
 
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
@@ -149,6 +168,7 @@ class ModelDownloadService : Service() {
         .setOnlyAlertOnce(true)
         .setOngoing(ongoing)
         .setProgress(100, progress, indeterminate)
+        .setGroup(NOTIFICATION_GROUP)
         .build()
 
     private fun contentIntent(): PendingIntent {
@@ -165,5 +185,6 @@ class ModelDownloadService : Service() {
         const val EXTRA_MODEL_ID = "extra_model_id"
         const val EXTRA_TOKEN = "extra_token"
         private const val CHANNEL_ID = "model_downloads"
+        private const val NOTIFICATION_GROUP = "model_download_group"
     }
 }

@@ -529,8 +529,10 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
 
         val extra = mapOf<String, Any>(
             "enable_thinking" to thinking,
-            "thinking_token_budget" to (if (thinking) 2048 else 0)
+            "thinking_token_budget" to (if (thinking) 256 else 0)
         )
+
+        android.util.Log.d("FitAI_Diag TestXuan", extra.toString())
 
         return ConversationConfig(
             systemInstructionContents,

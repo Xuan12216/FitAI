@@ -47,8 +47,10 @@ class FoodClassifierHelperImpl(private val context: Context) : FoodClassifierHel
     }
 
     override fun loadModel(modelPath: String) {
+        android.util.Log.d("FitAI_Scanner", "FoodClassifierHelper.loadModel path=$modelPath")
         val file = File(modelPath)
         if (!file.exists()) {
+            android.util.Log.d("FitAI_Scanner", "FoodClassifierHelper.loadModel file not found")
             _loadState.value = ModelLoadState.NotFound
             return
         }
@@ -74,7 +76,12 @@ class FoodClassifierHelperImpl(private val context: Context) : FoodClassifierHel
 
             interpreter = newInterpreter
             _loadState.value = ModelLoadState.Loaded
+            android.util.Log.d(
+                "FitAI_Scanner",
+                "FoodClassifierHelper loaded: input=${inputWidth}x${inputHeight}, float=$isInputFloat, classes=$numClasses, labels=${labelMap.size}"
+            )
         } catch (e: Exception) {
+            android.util.Log.e("FitAI_Scanner", "FoodClassifierHelper load failed", e)
             _loadState.value = ModelLoadState.Failed(e.localizedMessage ?: "載入失敗")
         }
     }
@@ -121,23 +128,27 @@ class FoodClassifierHelperImpl(private val context: Context) : FoodClassifierHel
             val results = mutableListOf<FoodClassificationResult>()
             for (i in 0 until numClasses) {
                 val confidence = probabilities[i]
-                if (confidence > 0.01f) {
-                    val rawName = if (labelMap.isNotEmpty() && i >= 0 && i < labelMap.size) {
-                        labelMap[i]
-                    } else {
-                        "Class $i"
-                    }
-                    results.add(
-                        FoodClassificationResult(
-                            label = translateFoodLabel(rawName),
-                            confidence = confidence
-                        )
-                    )
+                val rawName = if (labelMap.isNotEmpty() && i < labelMap.size) {
+                    labelMap[i]
+                } else {
+                    "Class $i"
                 }
+                results.add(
+                    FoodClassificationResult(
+                        label = translateFoodLabel(rawName),
+                        confidence = confidence
+                    )
+                )
             }
             results.sortByDescending { it.confidence }
-            results.take(5)
+            val topResults = results.take(5)
+            android.util.Log.d(
+                "FitAI_Scanner",
+                "FoodClassifierHelper classify top=${topResults.joinToString { "${it.label}:${it.confidence}" }}"
+            )
+            topResults
         } catch (e: Exception) {
+            android.util.Log.e("FitAI_Scanner", "FoodClassifierHelper classify failed", e)
             emptyList()
         }
     }

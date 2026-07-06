@@ -39,7 +39,7 @@ class ModelManager(
         return File(dir, fileName)
     }
 
-    suspend fun initializeDefaultModels() {
+    suspend fun initializeDefaultModels() = withContext(Dispatchers.IO) {
         // Clean up legacy model
         modelRepository.deleteModelById("gemma")
 
@@ -138,6 +138,7 @@ class ModelManager(
                 return@launch
             }
             val destinationFile = File(model.localPath)
+            var finalState: ModelDownloadState = ModelDownloadState.Idle
 
             try {
                 downloader.downloadModel(
@@ -145,15 +146,22 @@ class ModelManager(
                     token = token,
                     destinationFile = destinationFile,
                     onProgress = { state ->
+                        finalState = state
                         _downloadStates.update { it + (modelId to state) }
                     }
                 )
 
-                if (_downloadStates.value[modelId] is ModelDownloadState.Completed) {
-                    val updatedModel = model.copy(isDownloaded = true)
-                    modelRepository.updateModel(updatedModel)
-                    rememberSelectedModel(updatedModel)
-                    loadModel(updatedModel)
+                when (finalState) {
+                    is ModelDownloadState.Completed -> {
+                        val updatedModel = model.copy(isDownloaded = true)
+                        modelRepository.updateModel(updatedModel)
+                    }
+                    is ModelDownloadState.Failed,
+                    ModelDownloadState.Cancelled -> {
+                        destinationFile.delete()
+                        modelRepository.updateModel(model.copy(isDownloaded = false))
+                    }
+                    else -> Unit
                 }
             } finally {
                 synchronized(activeDownloadJobs) {

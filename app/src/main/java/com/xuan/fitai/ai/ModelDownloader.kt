@@ -16,26 +16,29 @@ class ModelDownloader {
         destinationFile: File,
         onProgress: (ModelDownloadState) -> Unit
     ) = withContext(Dispatchers.IO) {
+        val tempFile = File("${destinationFile.absolutePath}.download")
+        var connection: HttpURLConnection? = null
+
         try {
             destinationFile.parentFile?.mkdirs()
+            tempFile.delete()
+            destinationFile.delete()
 
-            val connectionUrl = URL(url)
-            val connection = connectionUrl.openConnection() as HttpURLConnection
-            connection.requestMethod = "GET"
-            connection.connectTimeout = 15000
-            connection.readTimeout = 15000
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-            
-            // Add Hugging Face token to header if provided
-            if (!token.isNullOrBlank()) {
-                connection.setRequestProperty("Authorization", "Bearer $token")
+            connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 15000
+                readTimeout = 15000
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Android)")
+                if (!token.isNullOrBlank()) {
+                    setRequestProperty("Authorization", "Bearer $token")
+                }
             }
-
             connection.connect()
 
             val responseCode = connection.responseCode
             if (responseCode !in 200..299) {
-                onProgress(ModelDownloadState.Failed("伺服器回應錯誤: $responseCode"))
+                tempFile.delete()
+                onProgress(ModelDownloadState.Failed("Server response error: $responseCode"))
                 return@withContext
             }
 
@@ -45,39 +48,50 @@ class ModelDownloader {
                 connection.contentLength.toLong()
             }
 
-            val inputStream = connection.inputStream
-            val outputStream = FileOutputStream(destinationFile)
             val buffer = ByteArray(8192)
-            var bytesRead: Int
             var totalBytesRead = 0L
 
             onProgress(ModelDownloadState.Downloading(0f, 0L, totalSize))
 
-            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                outputStream.write(buffer, 0, bytesRead)
-                totalBytesRead += bytesRead
-                val progress = if (totalSize > 0) totalBytesRead.toFloat() / totalSize else 0f
-                onProgress(ModelDownloadState.Downloading(progress, totalBytesRead, totalSize))
-            }
+            connection.inputStream.use { inputStream ->
+                FileOutputStream(tempFile).use { outputStream ->
+                    while (true) {
+                        val bytesRead = inputStream.read(buffer)
+                        if (bytesRead == -1) break
 
-            outputStream.flush()
-            outputStream.close()
-            inputStream.close()
-            connection.disconnect()
-
-            if (destinationFile.exists() && destinationFile.length() > 0) {
-                if (totalSize > 0 && totalBytesRead < totalSize) {
-                    destinationFile.delete()
-                    onProgress(ModelDownloadState.Failed("下載中斷: 檔案大小不完整 (${totalBytesRead} / ${totalSize} bytes)"))
-                } else {
-                    onProgress(ModelDownloadState.Completed)
+                        outputStream.write(buffer, 0, bytesRead)
+                        totalBytesRead += bytesRead
+                        val progress = if (totalSize > 0) totalBytesRead.toFloat() / totalSize else 0f
+                        onProgress(ModelDownloadState.Downloading(progress, totalBytesRead, totalSize))
+                    }
+                    outputStream.flush()
                 }
-            } else {
-                onProgress(ModelDownloadState.Failed("檔案寫入失敗，大小為0"))
             }
 
+            if (!tempFile.exists() || tempFile.length() == 0L) {
+                tempFile.delete()
+                onProgress(ModelDownloadState.Failed("File write failed: empty file"))
+                return@withContext
+            }
+
+            if (totalSize > 0 && totalBytesRead < totalSize) {
+                tempFile.delete()
+                onProgress(ModelDownloadState.Failed("Download interrupted: incomplete file (${totalBytesRead} / ${totalSize} bytes)"))
+                return@withContext
+            }
+
+            if (tempFile.renameTo(destinationFile)) {
+                onProgress(ModelDownloadState.Completed)
+            } else {
+                tempFile.delete()
+                onProgress(ModelDownloadState.Failed("Failed to save model file"))
+            }
         } catch (e: Exception) {
-            onProgress(ModelDownloadState.Failed(e.localizedMessage ?: "下載出錯"))
+            tempFile.delete()
+            destinationFile.delete()
+            onProgress(ModelDownloadState.Failed(e.localizedMessage ?: "Download failed"))
+        } finally {
+            connection?.disconnect()
         }
     }
 }

@@ -10,9 +10,12 @@ import com.xuan.fitai.data.model.UserProfile
 import com.xuan.fitai.data.repository.MealRepository
 import com.xuan.fitai.data.repository.UserRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
+@OptIn(FlowPreview::class)
 class DashboardViewModel(
     private val userRepository: UserRepository,
     private val mealRepository: MealRepository,
@@ -72,6 +75,7 @@ class DashboardViewModel(
                 )
                 request
             }
+                .debounce(500.milliseconds)
                 .distinctUntilChangedBy { it.eventSignature }
                 .collectLatest { input ->
                 if (!input.isActive) {
@@ -163,7 +167,6 @@ class DashboardViewModel(
             今日熱量目標為 ${profile.targetCalories.toInt()} kcal，已攝取 $totalCalories kcal。
             今日三大營養素已攝取：蛋白質 ${totalProtein.toInt()}g，碳水 ${totalCarbs.toInt()}g，脂肪 ${totalFat.toInt()}g。
             請根據以上數據，只輸出一段 50 個中文字以內的繁體中文實用建議。
-            不要輸出思考過程、分析步驟、JSON、Markdown、標題或任何前後綴。
         """.trimIndent()
 
         try {

@@ -50,6 +50,16 @@ fun FoodScannerScreen(
 
     val classifierLoaded by viewModel.classifierLoadState.collectAsState()
     val gemmaLoaded by viewModel.gemmaLoadState.collectAsState()
+    val gemmaVisionReady by viewModel.gemmaVisionReady.collectAsState()
+    val scannerModelReady = classifierLoaded == ModelLoadState.Loaded ||
+        gemmaLoaded == ModelLoadState.Loaded
+
+    LaunchedEffect(classifierLoaded, gemmaLoaded, gemmaVisionReady, scannerModelReady) {
+        android.util.Log.d(
+            "FitAI_Scanner",
+            "FoodScannerScreen model gate: classifier=$classifierLoaded, gemma=$gemmaLoaded, visionReady=$gemmaVisionReady, scannerReady=$scannerModelReady"
+        )
+    }
 
     var hasCameraPermission by remember { mutableStateOf(PermissionUtil.hasCameraPermission(context)) }
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -77,6 +87,17 @@ fun FoodScannerScreen(
     LaunchedEffect(Unit) {
         if (!hasCameraPermission) {
             permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val classifierFile = java.io.File(context.filesDir, "models/food_classifier.tflite")
+        android.util.Log.d(
+            "FitAI_Scanner",
+            "Scanner entered: classifierFileExists=${classifierFile.exists()}, classifierFileSize=${classifierFile.length()}"
+        )
+        if (classifierFile.exists() && classifierFile.length() > 0) {
+            viewModel.loadFoodClassifierIfNeeded(classifierFile.absolutePath)
         }
     }
 
@@ -123,7 +144,7 @@ fun FoodScannerScreen(
                         Text("授予權限")
                     }
                 }
-            } else if (classifierLoaded != ModelLoadState.Loaded || gemmaLoaded != ModelLoadState.Loaded) {
+            } else if (!scannerModelReady) {
                 // Models not loaded warning
                 Column(
                     modifier = Modifier
@@ -317,62 +338,35 @@ fun FoodScannerScreen(
                             Spacer(modifier = Modifier.height(8.dp))
 
                             if (state.candidates.isNotEmpty()) {
-                                Text(
-                                    text = "候選結果 (點選直接修改名稱)：",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.align(Alignment.Start)
-                                )
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState())
-                                        .padding(vertical = 4.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    state.candidates.forEach { candidate ->
-                                        SuggestionChip(
-                                            onClick = { foodName = candidate.label },
-                                            label = { Text("${candidate.label} (${(candidate.confidence * 100).toInt()}%)") }
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            // Common food quick-select card
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                                )
-                            ) {
-                                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                                    Text(
-                                        text = "📌 快速選擇食物（辨識不準時點選）",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
                                     )
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .horizontalScroll(rememberScrollState()),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        val commonFoods = listOf(
-                                            "雞蛋", "水煮蛋", "荷包蛋",
-                                            "雞胸肉", "地瓜", "香蕉",
-                                            "蘋果", "牛奶", "燕麥",
-                                            "沙拉", "白飯", "豆腐"
+                                ) {
+                                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                        Text(
+                                            text = "候選結果 (點選直接修改名稱)：",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.align(Alignment.Start)
                                         )
-                                        commonFoods.forEach { food ->
-                                            SuggestionChip(
-                                                onClick = { foodName = food },
-                                                label = { Text(food) }
-                                            )
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .horizontalScroll(rememberScrollState())
+                                                .padding(vertical = 4.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            state.candidates.forEach { candidate ->
+                                                SuggestionChip(
+                                                    onClick = { foodName = candidate.label },
+                                                    label = {
+                                                        val percentage = candidate.confidence * 100
+                                                        Text("${candidate.label} (${String.format(java.util.Locale.US, "%.3f", percentage)}%)")
+                                                    }
+                                                )
+                                            }
                                         }
                                     }
                                 }
