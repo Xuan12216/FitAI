@@ -44,6 +44,8 @@ fun ModelSetupScreen(
     val classifierLoadState by viewModel.classifierLoadState.collectAsState()
     val loadedModelName by viewModel.loadedModelName.collectAsState()
     val isApplyingModelConfig by viewModel.isApplyingModelConfig.collectAsState()
+    val isModelLoading = gemmaLoadState is ModelLoadState.Loading ||
+            classifierLoadState is ModelLoadState.Loading
 
     val scrollState = rememberScrollState()
     var selectedModelIdForImport by remember { mutableStateOf<String?>(null) }
@@ -146,6 +148,11 @@ fun ModelSetupScreen(
         LoadingDialog(
             title = "套用模型設定",
             message = "正在重新載入本地 Gemma 模型..."
+        )
+    } else if (isModelLoading) {
+        LoadingDialog(
+            title = "載入模型中",
+            message = "正在切換並載入 AI 模型，請稍候..."
         )
     }
 }
