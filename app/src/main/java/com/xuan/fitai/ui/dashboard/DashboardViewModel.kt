@@ -227,16 +227,12 @@ class DashboardViewModel(
         }
     }
 
-    suspend fun askAiForMealSuggestion(foodName: String): com.xuan.fitai.ai.GemmaFoodAnalysis? {
+    fun askAiForMealSuggestion(foodName: String): Flow<String> {
         if (gemmaHelper.loadState.value != ModelLoadState.Loaded) {
-            return null
+            return flow { throw IllegalStateException("Gemma model is not loaded") }
         }
         val goal = userProfile.value.goal
-        return try {
-            gemmaHelper.analyzeFood(foodName, "1份", goal)
-        } catch (e: Exception) {
-            null
-        }
+        return gemmaHelper.analyzeFoodFlow(foodName, "1份", goal)
     }
 
     fun addManualMeal(name: String, cal: Float, p: Float, c: Float, f: Float) {

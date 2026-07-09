@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -402,9 +403,13 @@ fun DashboardScreen(
                                 aiErrorMsg = null
                                 aiReasoning = ""
                                 coroutineScope.launch {
-                                    val result = viewModel.askAiForMealSuggestion(mealName)
-                                    isAiAnalyzing = false
-                                    if (result != null) {
+                                    val rawText = StringBuilder()
+                                    try {
+                                        viewModel.askAiForMealSuggestion(mealName.trim()).collect { token ->
+                                            rawText.append(token)
+                                            aiReasoning = rawText.toString()
+                                        }
+                                        val result = GemmaOutputParser.parseFoodAnalysis(rawText.toString())
                                         caloriesVal = result.calories.toInt().toString()
                                         proteinVal = result.protein.toInt().toString()
                                         carbsVal = result.carbs.toInt().toString()
@@ -413,8 +418,12 @@ fun DashboardScreen(
                                             thinkingText = result.thinking,
                                             contentText = result.reasoning
                                         )
-                                    } else {
+                                    } catch (e: CancellationException) {
+                                        throw e
+                                    } catch (e: Exception) {
                                         aiErrorMsg = "⚠️ 估算失敗！請確認已在「模型設定」頁面載入 Gemma 模型。"
+                                    } finally {
+                                        isAiAnalyzing = false
                                     }
                                 }
                             } else {
@@ -456,7 +465,7 @@ fun DashboardScreen(
                         )
                     }
 
-                    if (aiReasoning.isNotBlank()) {
+                    if (isAiAnalyzing || aiReasoning.isNotBlank()) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(
@@ -472,8 +481,9 @@ fun DashboardScreen(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 ThinkingContent(
-                                    rawText = aiReasoning,
-                                    contentTextStyle = MaterialTheme.typography.bodySmall
+                                    rawText = aiReasoning.ifBlank { "Gemma 分析中..." },
+                                    contentTextStyle = MaterialTheme.typography.bodySmall,
+                                    isGenerating = isAiAnalyzing
                                 )
                             }
                         }
