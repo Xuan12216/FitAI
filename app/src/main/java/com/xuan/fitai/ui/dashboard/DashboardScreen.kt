@@ -29,6 +29,7 @@ fun DashboardScreen(
     onNavigateToChat: () -> Unit,
     onNavigateToWorkout: () -> Unit,
     onNavigateToSetup: () -> Unit,
+    onNavigateToReminders: () -> Unit,
     onResetOnboarding: () -> Unit
 ) {
     val profile by viewModel.userProfile.collectAsState()
@@ -146,6 +147,26 @@ fun DashboardScreen(
                     Icon(imageVector = Icons.Default.Add, contentDescription = null)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("手動記錄")
+                }
+            }
+
+            // Today's reminders entry
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onNavigateToReminders,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("今日提醒", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        Text("設定用餐時間、喝水目標與推播提醒", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Icon(Icons.Default.KeyboardArrowRight, contentDescription = "管理提醒")
                 }
             }
 

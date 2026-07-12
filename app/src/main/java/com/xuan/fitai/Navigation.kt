@@ -22,10 +22,12 @@ import com.xuan.fitai.ui.setup.ModelSetupScreen
 import com.xuan.fitai.ui.setup.ModelSetupViewModel
 import com.xuan.fitai.ui.workout.WorkoutScreen
 import com.xuan.fitai.ui.workout.WorkoutViewModel
+import com.xuan.fitai.ui.reminders.ReminderScreen
+import com.xuan.fitai.ui.reminders.ReminderViewModel
 import kotlinx.coroutines.launch
 
 @Composable
-fun MainNavigation(modifier: Modifier = Modifier) {
+fun MainNavigation(modifier: Modifier = Modifier, openRemindersRequest: Int = 0) {
     val navController = rememberNavController()
     val context = LocalContext.current
     val app = context.applicationContext as FitAIApplication
@@ -39,6 +41,12 @@ fun MainNavigation(modifier: Modifier = Modifier) {
     }
 
     val startDestination = if (isOnboardingCompleted == true) "dashboard" else "onboarding"
+
+    androidx.compose.runtime.LaunchedEffect(openRemindersRequest, isOnboardingCompleted) {
+        if (openRemindersRequest > 0 && isOnboardingCompleted == true) {
+            navController.navigate("reminders") { launchSingleTop = true }
+        }
+    }
 
     NavHost(
         navController = navController,
@@ -73,6 +81,7 @@ fun MainNavigation(modifier: Modifier = Modifier) {
                 onNavigateToChat = { navController.navigate("chat") },
                 onNavigateToWorkout = { navController.navigate("workout") },
                 onNavigateToSetup = { navController.navigate("setup") },
+                onNavigateToReminders = { navController.navigate("reminders") },
                 onResetOnboarding = {
                     coroutineScope.launch {
                         app.userRepository.resetOnboarding()
@@ -144,6 +153,16 @@ fun MainNavigation(modifier: Modifier = Modifier) {
             )
             ModelSetupScreen(
                 viewModel = setupVm,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable("reminders") {
+            val reminderVm: ReminderViewModel = viewModel(
+                factory = ReminderViewModel.Factory(app.reminderRepository)
+            )
+            ReminderScreen(
+                viewModel = reminderVm,
                 onNavigateBack = { navController.popBackStack() }
             )
         }

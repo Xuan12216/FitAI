@@ -6,8 +6,16 @@ import com.xuan.fitai.data.datastore.UserPreferenceStore
 import com.xuan.fitai.data.local.AppDatabase
 import com.xuan.fitai.data.repository.*
 import com.xuan.fitai.util.HealthConnectHelper
+import com.xuan.fitai.data.repository.ReminderRepository
+import com.xuan.fitai.notification.ReminderScheduler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 
 class FitAIApplication : Application() {
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     lateinit var database: AppDatabase
     lateinit var userPreferenceStore: UserPreferenceStore
     
@@ -15,6 +23,7 @@ class FitAIApplication : Application() {
     lateinit var mealRepository: MealRepository
     lateinit var modelRepository: ModelRepository
     lateinit var workoutRepository: WorkoutRepository
+    lateinit var reminderRepository: ReminderRepository
     
     lateinit var gemmaHelper: GemmaLocalHelper
     lateinit var classifierHelper: FoodClassifierHelper
@@ -30,6 +39,10 @@ class FitAIApplication : Application() {
         mealRepository = MealRepository(database.mealDao())
         modelRepository = ModelRepository(database.modelDao())
         workoutRepository = WorkoutRepository(database.workoutDao())
+        reminderRepository = ReminderRepository(userPreferenceStore)
+        reminderRepository.settings
+            .onEach { ReminderScheduler.scheduleAll(this, it) }
+            .launchIn(applicationScope)
         
         gemmaHelper = GemmaLocalHelperImpl(this)
         classifierHelper = FoodClassifierHelperImpl(this)

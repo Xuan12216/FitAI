@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import com.xuan.fitai.data.model.UserProfile
+import com.xuan.fitai.data.model.MealReminder
+import com.xuan.fitai.data.model.ReminderSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -38,6 +40,16 @@ class UserPreferenceStore(private val context: Context) {
         val KEY_SYSTEM_PROMPT = stringPreferencesKey("system_prompt")
         val KEY_WORKOUT_PLAN_THINKING = stringPreferencesKey("workout_plan_thinking")
         val KEY_WORKOUT_SUMMARY = stringPreferencesKey("workout_summary")
+
+        val KEY_MEAL_REMINDERS_ENABLED = booleanPreferencesKey("meal_reminders_enabled")
+        val KEY_MEAL_REMINDERS = stringPreferencesKey("meal_reminders")
+        val KEY_WATER_REMINDERS_ENABLED = booleanPreferencesKey("water_reminders_enabled")
+        val KEY_WATER_TARGET_ML = intPreferencesKey("water_target_ml")
+        val KEY_WATER_INTERVAL_MINUTES = intPreferencesKey("water_interval_minutes")
+        val KEY_WATER_START_HOUR = intPreferencesKey("water_start_hour")
+        val KEY_WATER_END_HOUR = intPreferencesKey("water_end_hour")
+        val KEY_WATER_CONSUMED_ML = intPreferencesKey("water_consumed_ml")
+        val KEY_WATER_PROGRESS_DATE = stringPreferencesKey("water_progress_date")
     }
 
     val userProfileFlow: Flow<UserProfile> = context.dataStore.data.map { preferences ->
@@ -107,6 +119,20 @@ class UserPreferenceStore(private val context: Context) {
         preferences[KEY_WORKOUT_SUMMARY]
     }
 
+    val reminderSettingsFlow: Flow<ReminderSettings> = context.dataStore.data.map { preferences ->
+        ReminderSettings(
+            mealRemindersEnabled = preferences[KEY_MEAL_REMINDERS_ENABLED] ?: false,
+            meals = decodeMeals(preferences[KEY_MEAL_REMINDERS]),
+            waterRemindersEnabled = preferences[KEY_WATER_REMINDERS_ENABLED] ?: false,
+            waterTargetMl = preferences[KEY_WATER_TARGET_ML] ?: 2000,
+            waterIntervalMinutes = preferences[KEY_WATER_INTERVAL_MINUTES] ?: 60,
+            waterStartHour = preferences[KEY_WATER_START_HOUR] ?: 8,
+            waterEndHour = preferences[KEY_WATER_END_HOUR] ?: 22,
+            waterConsumedMl = preferences[KEY_WATER_CONSUMED_ML] ?: 0,
+            waterProgressDate = preferences[KEY_WATER_PROGRESS_DATE] ?: ""
+        )
+    }
+
     suspend fun saveWorkoutPlanThinking(thinking: String) {
         context.dataStore.edit { preferences ->
             preferences[KEY_WORKOUT_PLAN_THINKING] = thinking
@@ -117,6 +143,33 @@ class UserPreferenceStore(private val context: Context) {
         context.dataStore.edit { preferences ->
             preferences[KEY_WORKOUT_SUMMARY] = summary
         }
+    }
+
+    suspend fun saveReminderSettings(settings: ReminderSettings) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_MEAL_REMINDERS_ENABLED] = settings.mealRemindersEnabled
+            preferences[KEY_MEAL_REMINDERS] = settings.meals.joinToString(";") {
+                "${it.label}|${it.hour}|${it.minute}|${it.enabled}"
+            }
+            preferences[KEY_WATER_REMINDERS_ENABLED] = settings.waterRemindersEnabled
+            preferences[KEY_WATER_TARGET_ML] = settings.waterTargetMl
+            preferences[KEY_WATER_INTERVAL_MINUTES] = settings.waterIntervalMinutes
+            preferences[KEY_WATER_START_HOUR] = settings.waterStartHour
+            preferences[KEY_WATER_END_HOUR] = settings.waterEndHour
+            preferences[KEY_WATER_CONSUMED_ML] = settings.waterConsumedMl
+            preferences[KEY_WATER_PROGRESS_DATE] = settings.waterProgressDate
+        }
+    }
+
+    private fun decodeMeals(raw: String?): List<MealReminder> {
+        if (raw.isNullOrBlank()) return ReminderSettings.defaultMeals()
+        return raw.split(";").mapNotNull { item ->
+            val parts = item.split("|")
+            val hour = parts.getOrNull(1)?.toIntOrNull()
+            val minute = parts.getOrNull(2)?.toIntOrNull()
+            if (parts.size != 4 || hour == null || minute == null) null
+            else MealReminder(parts[0], hour, minute, parts[3].toBoolean())
+        }.ifEmpty { ReminderSettings.defaultMeals() }
     }
 
     suspend fun saveUserProfile(profile: UserProfile) {

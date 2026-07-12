@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.Modifier
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -23,10 +24,13 @@ import com.xuan.fitai.theme.FitAITheme
 import com.xuan.fitai.ui.components.LoadingDialog
 
 class MainActivity : ComponentActivity() {
+    private var openRemindersRequest by mutableIntStateOf(0)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val app = application as FitAIApplication
+        handleNotificationIntent(intent)
         requestNotificationPermissionIfNeeded()
 
         enableEdgeToEdge()
@@ -49,10 +53,23 @@ class MainActivity : ComponentActivity() {
                     if (startupInitializing) {
                         StartupLoadingDialog()
                     } else {
-                        MainNavigation()
+                        MainNavigation(openRemindersRequest = openRemindersRequest)
                     }
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNotificationIntent(intent)
+    }
+
+    private fun handleNotificationIntent(intent: android.content.Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_OPEN_REMINDERS, false) == true) {
+            openRemindersRequest++
+            intent.removeExtra(EXTRA_OPEN_REMINDERS)
         }
     }
 
@@ -69,6 +86,7 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val NOTIFICATION_PERMISSION_REQUEST_CODE = 2001
+        const val EXTRA_OPEN_REMINDERS = "open_reminders"
     }
 }
 
