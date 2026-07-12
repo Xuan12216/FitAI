@@ -44,6 +44,102 @@ object GemmaOutputParser {
     }
 
     /**
+     * Splits Gemma Vision raw output into a Pair containing (thinkingText, foodName).
+     * It filters out any conversational, list format, or thinking preamble if the model
+     * did not use channel tags.
+     */
+    fun splitVisionOutput(rawText: String): Pair<String?, String> {
+        val trimmed = rawText.trim()
+
+        val matches = CHANNEL_REGEX.findAll(trimmed).toList()
+        if (matches.isNotEmpty()) {
+            var thinkingText: String? = null
+            var contentText = ""
+
+            for (i in matches.indices) {
+                val match = matches[i]
+                val channelName = match.groupValues[1]
+                val startIdx = match.range.last + 1
+                val endIdx = if (i + 1 < matches.size) matches[i + 1].range.first else trimmed.length
+                val sectionText = trimmed.substring(startIdx, endIdx).trim()
+
+                if (channelName == "thought" || channelName == "thinking") {
+                    thinkingText = sectionText
+                } else {
+                    contentText = sectionText
+                }
+            }
+            return Pair(thinkingText, contentText)
+        }
+
+        if (trimmed.length < 15 && !trimmed.contains("\n")) {
+            return Pair(null, trimmed.trimEnd('.', '。', '!', '！'))
+        }
+
+        val startsWithThinking = trimmed.take(100).contains("thinking", ignoreCase = true) ||
+                trimmed.take(100).contains("process", ignoreCase = true) ||
+                trimmed.take(100).contains("analyze", ignoreCase = true) ||
+                trimmed.take(100).contains("分析", ignoreCase = true) ||
+                trimmed.take(100).contains("思考", ignoreCase = true) ||
+                trimmed.startsWith("1.") || trimmed.startsWith("1. ") || trimmed.startsWith("1. **")
+
+        if (startsWithThinking) {
+            val lines = trimmed.lines()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+
+            if (lines.isNotEmpty()) {
+                for (i in lines.indices.reversed()) {
+                    val line = lines[i]
+                    if (line.startsWith("*") || line.startsWith("-") || line.startsWith("•") || line.startsWith("#")) {
+                        continue
+                    }
+                    if (line.contains("thinking", ignoreCase = true) || line.contains("process", ignoreCase = true) || 
+                        line.contains("image", ignoreCase = true) || line.contains("analyze", ignoreCase = true) ||
+                        line.contains("request", ignoreCase = true)) {
+                        continue
+                    }
+                    if (line.length in 1..15) {
+                        var cleanLine = line
+                        if (cleanLine.startsWith("Answer:", ignoreCase = true)) {
+                            cleanLine = cleanLine.substring(7).trim()
+                        }
+                        val numPrefixMatch = Regex("^\\d+\\.\\s*").find(cleanLine)
+                        if (numPrefixMatch != null) {
+                            cleanLine = cleanLine.substring(numPrefixMatch.range.last + 1).trim()
+                        }
+
+                        val cleanName = cleanLine.trimEnd('.', '。', '!', '！')
+
+                        val lineIndex = trimmed.lastIndexOf(line)
+                        val thinking = if (lineIndex > 0) trimmed.substring(0, lineIndex).trim() else null
+
+                        return Pair(thinking, cleanName)
+                    }
+                }
+            }
+
+            return Pair(trimmed, "")
+        }
+
+        return Pair(null, trimmed)
+    }
+
+    /**
+     * Extracts only the final concise food name from Gemma Vision raw output.
+     */
+    fun extractVisionFoodName(rawText: String): String {
+        return splitVisionOutput(rawText).second
+    }
+
+    /**
+     * Extracts the thinking process from Gemma Vision raw output.
+     */
+    fun extractVisionThinking(rawText: String): String? {
+        return splitVisionOutput(rawText).first
+    }
+
+    /**
      * Returns only the thinking/reasoning portion of [rawText], or null if
      * no thinking channel tag is present.
      */

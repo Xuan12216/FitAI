@@ -26,10 +26,7 @@ import com.xuan.fitai.ui.components.ThinkingContent
 fun DashboardScreen(
     viewModel: DashboardViewModel,
     onNavigateToScanner: () -> Unit,
-    onNavigateToChat: () -> Unit,
-    onNavigateToWorkout: () -> Unit,
     onNavigateToSetup: () -> Unit,
-    onNavigateToReminders: () -> Unit,
     onResetOnboarding: () -> Unit
 ) {
     val profile by viewModel.userProfile.collectAsState()
@@ -61,8 +58,11 @@ fun DashboardScreen(
             CenterAlignedTopAppBar(
                 title = { Text("FitAI 健康儀表板", fontWeight = FontWeight.Bold) },
                 actions = {
+                    IconButton(onClick = onNavigateToSetup) {
+                        Icon(imageVector = Icons.Default.Tune, contentDescription = "模型管理設定")
+                    }
                     IconButton(onClick = onResetOnboarding) {
-                        Icon(imageVector = Icons.Default.Edit, contentDescription = "編輯基本資料")
+                        Icon(imageVector = Icons.Default.AccountCircle, contentDescription = "編輯基本資料")
                     }
                 }
             )
@@ -135,7 +135,7 @@ fun DashboardScreen(
                     modifier = Modifier.weight(1.2f),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null)
+                    Icon(imageVector = Icons.Default.PhotoCamera, contentDescription = null)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("相機掃描")
                 }
@@ -147,91 +147,6 @@ fun DashboardScreen(
                     Icon(imageVector = Icons.Default.Add, contentDescription = null)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("手動記錄")
-                }
-            }
-
-            // Today's reminders entry
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = onNavigateToReminders,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("今日提醒", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        Text("設定用餐時間、喝水目標與推播提醒", style = MaterialTheme.typography.bodySmall)
-                    }
-                    Icon(Icons.Default.KeyboardArrowRight, contentDescription = "管理提醒")
-                }
-            }
-
-            // Features Grid
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Card(
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        val e2b = java.io.File(context.filesDir, "models/gemma-4-E2B-it.litertlm")
-                        val e4b = java.io.File(context.filesDir, "models/gemma-4-E4B-it.litertlm")
-                        val isGemmaReady = (e2b.exists() && e2b.length() > 0) || (e4b.exists() && e4b.length() > 0)
-                        if (isGemmaReady) {
-                            onNavigateToChat()
-                        } else {
-                            android.widget.Toast.makeText(context, "⚠️ 尚未下載 Gemma 4 模型！請先至「模型設定」頁面下載或匯入。", android.widget.Toast.LENGTH_LONG).show()
-                        }
-                    }
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(imageVector = Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("問 AI 助理", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        Text("諮詢飲食運動", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-
-                Card(
-                    modifier = Modifier.weight(1f),
-                    onClick = onNavigateToWorkout
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("運動計畫", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        Text("個人運動菜單", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-            
-            // Model Settings Entry Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = onNavigateToSetup,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(imageVector = Icons.Default.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("模型管理設定", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        Text("管理本地 Gemma 與辨識模型", style = MaterialTheme.typography.bodySmall)
-                    }
-                    Icon(imageVector = Icons.Default.KeyboardArrowRight, contentDescription = null)
                 }
             }
 

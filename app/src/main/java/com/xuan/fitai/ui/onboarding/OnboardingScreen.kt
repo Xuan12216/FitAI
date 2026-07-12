@@ -12,14 +12,27 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 
+import androidx.compose.ui.text.style.TextAlign
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OnboardingScreen(
     viewModel: OnboardingViewModel,
     onNavigateToDashboard: () -> Unit
 ) {
+    val isLoaded by viewModel.isLoaded.collectAsState()
     val profile by viewModel.profile.collectAsState()
     val scrollState = rememberScrollState()
+
+    if (!isLoaded) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator()
+        }
+        return
+    }
 
     var ageText by remember { mutableStateOf(profile.age.toString()) }
     var heightText by remember { mutableStateOf(profile.height.toString()) }
@@ -59,7 +72,7 @@ fun OnboardingScreen(
                         FilterChip(
                             selected = selected,
                             onClick = { viewModel.updateGoal(goal) },
-                            label = { Text(goal, modifier = Modifier.padding(vertical = 4.dp)) },
+                            label = { Text(goal, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), textAlign = TextAlign.Center) },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -79,7 +92,7 @@ fun OnboardingScreen(
                         FilterChip(
                             selected = selected,
                             onClick = { viewModel.updateGender(gender) },
-                            label = { Text(gender, modifier = Modifier.padding(vertical = 4.dp)) },
+                            label = { Text(gender, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), textAlign = TextAlign.Center) },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -99,6 +112,7 @@ fun OnboardingScreen(
                     },
                     label = { Text("年齡") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center),
                     modifier = Modifier.weight(1f)
                 )
                 OutlinedTextField(
@@ -109,6 +123,7 @@ fun OnboardingScreen(
                     },
                     label = { Text("身高 (cm)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center),
                     modifier = Modifier.weight(1f)
                 )
                 OutlinedTextField(
@@ -119,6 +134,7 @@ fun OnboardingScreen(
                     },
                     label = { Text("體重 (kg)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center),
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -136,7 +152,7 @@ fun OnboardingScreen(
                         FilterChip(
                             selected = selected,
                             onClick = { viewModel.updateActivityLevel(level) },
-                            label = { Text(level, modifier = Modifier.padding(vertical = 4.dp)) },
+                            label = { Text(level, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), textAlign = TextAlign.Center) },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -156,7 +172,7 @@ fun OnboardingScreen(
                         FilterChip(
                             selected = selected,
                             onClick = { viewModel.updateDietPreference(pref) },
-                            label = { Text(pref, modifier = Modifier.padding(vertical = 4.dp)) },
+                            label = { Text(pref, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), textAlign = TextAlign.Center) },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -176,7 +192,7 @@ fun OnboardingScreen(
                         FilterChip(
                             selected = selected,
                             onClick = { viewModel.updateWorkoutExperience(exp) },
-                            label = { Text(exp, modifier = Modifier.padding(vertical = 4.dp)) },
+                            label = { Text(exp, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), textAlign = TextAlign.Center) },
                             modifier = Modifier.weight(1f)
                         )
                     }

@@ -10,9 +10,26 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+import kotlinx.coroutines.flow.first
+
 class OnboardingViewModel(private val userRepository: UserRepository) : ViewModel() {
     private val _profile = MutableStateFlow(UserProfile())
     val profile: StateFlow<UserProfile> = _profile.asStateFlow()
+
+    private val _isLoaded = MutableStateFlow(false)
+    val isLoaded: StateFlow<Boolean> = _isLoaded.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            try {
+                _profile.value = userRepository.userProfile.first()
+            } catch (e: Exception) {
+                // Keep default
+            } finally {
+                _isLoaded.value = true
+            }
+        }
+    }
 
     fun updateGoal(goal: String) { _profile.value = _profile.value.copy(goal = goal) }
     fun updateGender(gender: String) { _profile.value = _profile.value.copy(gender = gender) }

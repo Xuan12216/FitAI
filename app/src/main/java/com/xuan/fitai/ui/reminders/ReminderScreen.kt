@@ -49,15 +49,53 @@ import androidx.core.content.ContextCompat
 import com.xuan.fitai.data.model.MealReminder
 import com.xuan.fitai.notification.ReminderScheduler
 import java.time.LocalDate
+import android.content.Context
+import android.content.Intent
+import android.os.PowerManager
+import android.app.AlarmManager
+import android.provider.Settings
+import android.net.Uri
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.DisposableEffect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReminderScreen(viewModel: ReminderViewModel, onNavigateBack: () -> Unit) {
+fun ReminderScreen(viewModel: ReminderViewModel) {
     val settings by viewModel.settings.collectAsState()
     val context = LocalContext.current
     val notificationPermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    val powerManager = remember { context.getSystemService(Context.POWER_SERVICE) as PowerManager }
+    val alarmManager = remember { context.getSystemService(Context.ALARM_SERVICE) as AlarmManager }
+
+    var isBatteryOptimized by remember { mutableStateOf(false) }
+    var isExactAlarmPermissionMissing by remember { mutableStateOf(false) }
+
+    fun checkPermissions() {
+        isBatteryOptimized = !powerManager.isIgnoringBatteryOptimizations(context.packageName)
+        isExactAlarmPermissionMissing = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            !alarmManager.canScheduleExactAlarms()
+        } else {
+            false
+        }
+    }
+
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                checkPermissions()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     fun save(transform: (com.xuan.fitai.data.model.ReminderSettings) -> com.xuan.fitai.data.model.ReminderSettings) {
         viewModel.update(transform)
@@ -69,8 +107,7 @@ fun ReminderScreen(viewModel: ReminderViewModel, onNavigateBack: () -> Unit) {
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("提醒與習慣", fontWeight = FontWeight.Bold) },
-                navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, "返回") } }
+                title = { Text("提醒與習慣", fontWeight = FontWeight.Bold) }
             )
         }
     ) { padding ->
@@ -78,6 +115,59 @@ fun ReminderScreen(viewModel: ReminderViewModel, onNavigateBack: () -> Unit) {
             modifier = Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if (isBatteryOptimized) {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Notifications, null)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("忽略電池最佳化", fontWeight = FontWeight.Bold)
+                            Text("建議開啟「忽略電池最佳化」以確保提醒能準時送達。", style = MaterialTheme.typography.bodySmall)
+                        }
+                        FilterChip(
+                            selected = false,
+                            onClick = {
+                                try {
+                                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                        data = Uri.parse("package:${context.packageName}")
+                                    }
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                    context.startActivity(intent)
+                                }
+                            },
+                            label = { Text("前往設定") }
+                        )
+                    }
+                }
+            }
+
+            if (isExactAlarmPermissionMissing) {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Notifications, null)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("需要精準鬧鐘權限", fontWeight = FontWeight.Bold)
+                            Text("開啟精準鬧鐘以確保提醒時間不會被系統延遲。", style = MaterialTheme.typography.bodySmall)
+                        }
+                        FilterChip(
+                            selected = false,
+                            onClick = {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                        data = Uri.parse("package:${context.packageName}")
+                                    }
+                                    context.startActivity(intent)
+                                }
+                            },
+                            label = { Text("允許") }
+                        )
+                    }
+                }
+            }
+
             if (!notificationPermissionGranted) {
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {

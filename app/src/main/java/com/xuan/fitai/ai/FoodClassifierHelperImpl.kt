@@ -24,6 +24,7 @@ class FoodClassifierHelperImpl(private val context: Context) : FoodClassifierHel
     private var inputWidth = 224
     private var inputHeight = 224
     private var isInputFloat = true
+    private var isOutputFloat = true
     private var numClasses = 0
 
     private fun loadModelFile(modelPath: String): ByteBuffer {
@@ -73,6 +74,8 @@ class FoodClassifierHelperImpl(private val context: Context) : FoodClassifierHel
             val outputTensor = newInterpreter.getOutputTensor(0)
             val outputShape = outputTensor.shape() // e.g. [1, 2024]
             numClasses = outputShape[1]
+            val outputDataType = outputTensor.dataType()
+            isOutputFloat = outputDataType.toString().contains("FLOAT", ignoreCase = true)
 
             interpreter = newInterpreter
             _loadState.value = ModelLoadState.Loaded
@@ -115,7 +118,8 @@ class FoodClassifierHelperImpl(private val context: Context) : FoodClassifierHel
                 }
             }
 
-            val outputBuffer = ByteBuffer.allocateDirect(1 * numClasses * 4).apply {
+            val bytesPerOutput = if (isOutputFloat) 4 else 1
+            val outputBuffer = ByteBuffer.allocateDirect(1 * numClasses * bytesPerOutput).apply {
                 order(ByteOrder.nativeOrder())
             }
             
@@ -123,7 +127,25 @@ class FoodClassifierHelperImpl(private val context: Context) : FoodClassifierHel
 
             outputBuffer.rewind()
             val probabilities = FloatArray(numClasses)
-            outputBuffer.asFloatBuffer().get(probabilities)
+            if (isOutputFloat) {
+                outputBuffer.asFloatBuffer().get(probabilities)
+            } else {
+                val outputTensor = currentInterpreter.getOutputTensor(0)
+                val dataType = outputTensor.dataType()
+                val scale = outputTensor.quantizationParams().scale
+                val zeroPoint = outputTensor.quantizationParams().zeroPoint
+                
+                val byteValues = ByteArray(numClasses)
+                outputBuffer.get(byteValues)
+                for (i in 0 until numClasses) {
+                    val value = if (dataType.toString().contains("UINT8", ignoreCase = true)) {
+                        byteValues[i].toInt() and 0xFF
+                    } else {
+                        byteValues[i].toInt() // INT8
+                    }
+                    probabilities[i] = (value - zeroPoint) * scale
+                }
+            }
 
             val results = mutableListOf<FoodClassificationResult>()
             for (i in 0 until numClasses) {

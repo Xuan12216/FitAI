@@ -18,8 +18,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 sealed class ScannerUiState {
     data object CameraPreview : ScannerUiState()
-    data object Classifying : ScannerUiState()
-    data object GemmaVisionIdentifying : ScannerUiState()
     data class EditDetails(
         val detectedLabel: String,
         val confidence: Float,
@@ -27,7 +25,6 @@ sealed class ScannerUiState {
         val gemmaIdentified: Boolean = false,
         val isRecognizing: Boolean = false
     ) : ScannerUiState()
-    data object GemmaAnalysing : ScannerUiState()
     data class GemmaAnalysisStreaming(val rawText: String = "") : ScannerUiState()
     data class GemmaAnalysisResult(
         val foodName: String,

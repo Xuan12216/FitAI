@@ -40,7 +40,10 @@ class ReminderNotificationReceiver : BroadcastReceiver() {
                         NotificationManagerCompat.from(context).cancel(WATER_NOTIFICATION_ID)
                         ReminderScheduler.scheduleAll(context, app.reminderRepository.settings.first())
                     }
-                    ACTION_SNOOZE_WATER -> ReminderScheduler.scheduleWaterIn(context, 15)
+                    ACTION_SNOOZE_WATER -> {
+                        NotificationManagerCompat.from(context).cancel(WATER_NOTIFICATION_ID)
+                        ReminderScheduler.scheduleWaterIn(context, 15)
+                    }
                     else -> {
                         showNotification(context, type, mealLabel)
                         ReminderScheduler.rescheduleAfterReminder(context, app.reminderRepository.settings.first())

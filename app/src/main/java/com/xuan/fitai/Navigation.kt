@@ -5,10 +5,22 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.xuan.fitai.ui.chat.ChatScreen
 import com.xuan.fitai.ui.chat.ChatViewModel
@@ -25,9 +37,15 @@ import com.xuan.fitai.ui.workout.WorkoutViewModel
 import com.xuan.fitai.ui.reminders.ReminderScreen
 import com.xuan.fitai.ui.reminders.ReminderViewModel
 import kotlinx.coroutines.launch
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.compose.foundation.layout.WindowInsets
 
 @Composable
-fun MainNavigation(modifier: Modifier = Modifier, openRemindersRequest: Int = 0) {
+fun MainNavigation(
+    modifier: Modifier = Modifier,
+    openRemindersRequest: Int = 0,
+    onNavigateToRemindersHandled: () -> Unit = {}
+) {
     val navController = rememberNavController()
     val context = LocalContext.current
     val app = context.applicationContext as FitAIApplication
@@ -41,17 +59,50 @@ fun MainNavigation(modifier: Modifier = Modifier, openRemindersRequest: Int = 0)
     }
 
     val startDestination = if (isOnboardingCompleted == true) "dashboard" else "onboarding"
+    val currentBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = currentBackStackEntry?.destination?.route
+    val primaryDestinations = listOf(
+        BottomDestination("dashboard", "首頁", Icons.Default.Home),
+        BottomDestination("chat", "AI", Icons.AutoMirrored.Filled.Chat),
+        BottomDestination("workout", "運動", Icons.Default.FitnessCenter),
+        BottomDestination("reminders", "提醒", Icons.Default.Notifications)
+    )
 
     androidx.compose.runtime.LaunchedEffect(openRemindersRequest, isOnboardingCompleted) {
         if (openRemindersRequest > 0 && isOnboardingCompleted == true) {
             navController.navigate("reminders") { launchSingleTop = true }
+            onNavigateToRemindersHandled()
         }
     }
 
+    Scaffold(
+        modifier = modifier,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        bottomBar = {
+            if (isOnboardingCompleted == true && primaryDestinations.any { it.route == currentRoute }) {
+                NavigationBar {
+                    primaryDestinations.forEach { destination ->
+                        NavigationBarItem(
+                            selected = currentRoute == destination.route,
+                            onClick = {
+                                navController.navigate(destination.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            icon = { Icon(destination.icon, contentDescription = destination.label) },
+                            label = { Text(destination.label) }
+                        )
+                    }
+                }
+            }
+        }
+    ) { outerPadding ->
     NavHost(
         navController = navController,
         startDestination = startDestination,
-        modifier = modifier
+        modifier = Modifier.padding(outerPadding)
     ) {
         composable("onboarding") {
             val onboardingVm: OnboardingViewModel = viewModel(
@@ -78,10 +129,7 @@ fun MainNavigation(modifier: Modifier = Modifier, openRemindersRequest: Int = 0)
             DashboardScreen(
                 viewModel = dashboardVm,
                 onNavigateToScanner = { navController.navigate("scanner") },
-                onNavigateToChat = { navController.navigate("chat") },
-                onNavigateToWorkout = { navController.navigate("workout") },
                 onNavigateToSetup = { navController.navigate("setup") },
-                onNavigateToReminders = { navController.navigate("reminders") },
                 onResetOnboarding = {
                     coroutineScope.launch {
                         app.userRepository.resetOnboarding()
@@ -122,7 +170,6 @@ fun MainNavigation(modifier: Modifier = Modifier, openRemindersRequest: Int = 0)
             )
             ChatScreen(
                 viewModel = chatVm,
-                onNavigateBack = { navController.popBackStack() },
                 onNavigateToSetup = { navController.navigate("setup") }
             )
         }
@@ -138,8 +185,7 @@ fun MainNavigation(modifier: Modifier = Modifier, openRemindersRequest: Int = 0)
                 )
             )
             WorkoutScreen(
-                viewModel = workoutVm,
-                onNavigateBack = { navController.popBackStack() }
+                viewModel = workoutVm
             )
         }
 
@@ -162,9 +208,15 @@ fun MainNavigation(modifier: Modifier = Modifier, openRemindersRequest: Int = 0)
                 factory = ReminderViewModel.Factory(app.reminderRepository)
             )
             ReminderScreen(
-                viewModel = reminderVm,
-                onNavigateBack = { navController.popBackStack() }
+                viewModel = reminderVm
             )
         }
     }
+    }
 }
+
+private data class BottomDestination(
+    val route: String,
+    val label: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector
+)

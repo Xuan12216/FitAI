@@ -53,7 +53,10 @@ class MainActivity : ComponentActivity() {
                     if (startupInitializing) {
                         StartupLoadingDialog()
                     } else {
-                        MainNavigation(openRemindersRequest = openRemindersRequest)
+                        MainNavigation(
+                            openRemindersRequest = openRemindersRequest,
+                            onNavigateToRemindersHandled = { openRemindersRequest = 0 }
+                        )
                     }
                 }
             }

@@ -32,8 +32,7 @@ import java.util.Calendar
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun WorkoutScreen(
-    viewModel: WorkoutViewModel,
-    onNavigateBack: () -> Unit
+    viewModel: WorkoutViewModel
 ) {
     val profile by viewModel.userProfile.collectAsState()
     val plans by viewModel.workoutPlans.collectAsState()
@@ -91,11 +90,6 @@ fun WorkoutScreen(
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("運動計畫", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
                 actions = {
                     IconButton(onClick = { showAiDialog = true }) {
                         Icon(imageVector = Icons.Default.Refresh, contentDescription = "AI 重新設計計畫")

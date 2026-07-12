@@ -24,7 +24,6 @@ import com.xuan.fitai.ui.components.ThinkingContent
 @Composable
 fun ChatScreen(
     viewModel: ChatViewModel,
-    onNavigateBack: () -> Unit,
     onNavigateToSetup: () -> Unit
 ) {
     val messages by viewModel.chatMessages.collectAsState()
@@ -47,11 +46,6 @@ fun ChatScreen(
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("本地 Gemma AI 助理", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
                 actions = {
                     IconButton(onClick = { viewModel.clearChat() }) {
                         Icon(imageVector = Icons.Default.Delete, contentDescription = "清除對話紀錄")

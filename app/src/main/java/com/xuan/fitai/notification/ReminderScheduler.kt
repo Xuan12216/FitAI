@@ -24,18 +24,14 @@ object ReminderScheduler {
                     set(Calendar.MILLISECOND, 0)
                     if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_YEAR, 1)
                 }
-                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pendingIntent)
+                setAlarm(alarmManager, calendar.timeInMillis, pendingIntent)
             }
         }
 
         val waterIntent = reminderIntent(context, WATER_TYPE, WATER_REQUEST_CODE, null)
         alarmManager.cancel(waterIntent)
         if (settings.waterRemindersEnabled) {
-            alarmManager.setAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                nextWaterTime(settings).timeInMillis,
-                waterIntent
-            )
+            setAlarm(alarmManager, nextWaterTime(settings).timeInMillis, waterIntent)
         }
     }
 
@@ -45,11 +41,19 @@ object ReminderScheduler {
         val alarmManager = context.getSystemService(AlarmManager::class.java)
         val waterIntent = reminderIntent(context, WATER_TYPE, WATER_REQUEST_CODE, null)
         alarmManager.cancel(waterIntent)
-        alarmManager.setAndAllowWhileIdle(
-            AlarmManager.RTC_WAKEUP,
-            System.currentTimeMillis() + minutes * 60_000L,
-            waterIntent
-        )
+        setAlarm(alarmManager, System.currentTimeMillis() + minutes * 60_000L, waterIntent)
+    }
+
+    private fun setAlarm(alarmManager: AlarmManager, triggerAtMillis: Long, pendingIntent: PendingIntent) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            if (alarmManager.canScheduleExactAlarms()) {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+            } else {
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+            }
+        } else {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+        }
     }
 
     fun sendTestWaterReminder(context: Context) {

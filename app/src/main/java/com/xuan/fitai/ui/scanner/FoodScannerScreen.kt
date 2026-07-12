@@ -7,6 +7,7 @@ import android.graphics.BitmapFactory
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -85,6 +87,11 @@ fun FoodScannerScreen(
     // Camera settings
     val cameraController = remember { CameraController() }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+    DisposableEffect(Unit) {
+        onDispose {
+            cameraExecutor.shutdown()
+        }
+    }
 
     LaunchedEffect(Unit) {
         if (!hasCameraPermission) {
@@ -253,47 +260,7 @@ fun FoodScannerScreen(
                             }
                         }
                     }
-                    is ScannerUiState.Classifying -> {
-                        Column(
-                            modifier = Modifier.fillMaxSize(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = "影像辨識結果",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text("本地影像分類模型分析中...")
-                        }
-                    }
-                    is ScannerUiState.GemmaVisionIdentifying -> {
-                        Column(
-                            modifier = Modifier.fillMaxSize(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = "影像辨識結果",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "✨ Gemma 4 視覚辨識中...",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.tertiary
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "正在使用 Gemma 4 多模態視覺 AI 辨識食物",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+
                     is ScannerUiState.EditDetails -> {
                         var foodName by remember { mutableStateOf("") }
                         var portion by remember { mutableStateOf("1份") }
@@ -308,25 +275,9 @@ fun FoodScannerScreen(
                         ) {
                             // Title with Gemma badge if identified by vision
                             if (state.gemmaIdentified) {
-                                val detectedFoodName = GemmaOutputParser.extractContent(state.detectedLabel).trim()
-                                val thinkingText = GemmaOutputParser.extractThinking(state.detectedLabel)
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text(
-                                        text = "影像辨識結果",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    SuggestionChip(
-                                        onClick = {},
-                                        label = { Text("✨ Gemma 4 視覺", style = MaterialTheme.typography.labelSmall) },
-                                        colors = SuggestionChipDefaults.suggestionChipColors(
-                                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                                        )
-                                    )
-                                }
+                                val detectedFoodName = GemmaOutputParser.extractVisionFoodName(state.detectedLabel)
+                                val thinkingText = GemmaOutputParser.extractVisionThinking(state.detectedLabel)
+
                                 if (!thinkingText.isNullOrBlank()) {
                                     ThinkingContent(
                                         rawText = GemmaOutputParser.withThinkingContent(thinkingText, ""),
@@ -337,23 +288,58 @@ fun FoodScannerScreen(
                                         isGenerating = state.isRecognizing
                                     )
                                 }
+
                                 if (detectedFoodName.isNotBlank()) {
-                                    Box(
+                                    Card(
                                         modifier = Modifier
-                                            .align(Alignment.Start)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f))
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(16.dp))
                                             .clickable(enabled = !state.isRecognizing) {
                                                 foodName = detectedFoodName
-                                            }
-                                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                                            },
+                                        shape = RoundedCornerShape(16.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                                        ),
+                                        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.4f))
                                     ) {
-                                        Text(
-                                            text = detectedFoodName,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.onTertiaryContainer
-                                        )
+                                        Row(
+                                            modifier = Modifier.padding(16.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.AutoAwesome,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onTertiaryContainer
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "Gemma 視覺辨識結果",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                                                )
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text(
+                                                    text = detectedFoodName,
+                                                    style = MaterialTheme.typography.titleLarge,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                                )
+                                            }
+                                            Text(
+                                                text = "點擊套用",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onTertiary,
+                                                modifier = Modifier
+                                                    .background(
+                                                        color = MaterialTheme.colorScheme.tertiary,
+                                                        shape = RoundedCornerShape(8.dp)
+                                                    )
+                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
                                     }
                                 }
                             } else {
@@ -368,8 +354,6 @@ fun FoodScannerScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-
-                            Spacer(modifier = Modifier.height(8.dp))
 
                             if (state.candidates.isNotEmpty()) {
                                 Card(
@@ -388,8 +372,7 @@ fun FoodScannerScreen(
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .horizontalScroll(rememberScrollState())
-                                                .padding(vertical = 4.dp),
+                                                .horizontalScroll(rememberScrollState()),
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
                                             state.candidates.forEach { candidate ->
@@ -397,7 +380,7 @@ fun FoodScannerScreen(
                                                     onClick = { foodName = candidate.label },
                                                     label = {
                                                         val percentage = candidate.confidence * 100
-                                                        Text("${candidate.label} (${String.format(java.util.Locale.US, "%.3f", percentage)}%)")
+                                                        Text("${candidate.label} (${String.format(java.util.Locale.US, "%.2f", percentage)}%)")
                                                     }
                                                 )
                                             }
@@ -472,17 +455,7 @@ fun FoodScannerScreen(
                             }
                         }
                     }
-                    is ScannerUiState.GemmaAnalysing -> {
-                        Column(
-                            modifier = Modifier.fillMaxSize(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            CircularProgressIndicator()
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text("本地 Gemma AI 計算與分析中...")
-                        }
-                    }
+
                     is ScannerUiState.GemmaAnalysisResult -> {
                         val analysis = state.analysis
                         Column(
