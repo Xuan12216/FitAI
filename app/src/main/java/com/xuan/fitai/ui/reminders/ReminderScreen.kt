@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -45,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.core.content.ContextCompat
 import com.xuan.fitai.data.model.MealReminder
 import com.xuan.fitai.notification.ReminderScheduler
@@ -62,7 +64,7 @@ import androidx.compose.runtime.DisposableEffect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReminderScreen(viewModel: ReminderViewModel) {
+fun ReminderScreen(viewModel: ReminderViewModel, bottomContentPadding: Dp = 0.dp) {
     val settings by viewModel.settings.collectAsState()
     val context = LocalContext.current
     val notificationPermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
@@ -105,6 +107,7 @@ fun ReminderScreen(viewModel: ReminderViewModel) {
     androidx.compose.runtime.LaunchedEffect(settings) { ReminderScheduler.scheduleAll(context, settings) }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("提醒與習慣", fontWeight = FontWeight.Bold) }
@@ -112,7 +115,8 @@ fun ReminderScreen(viewModel: ReminderViewModel) {
         }
     ) { padding ->
         Column(
-            modifier = Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+            modifier = Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp + bottomContentPadding),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             if (isBatteryOptimized) {

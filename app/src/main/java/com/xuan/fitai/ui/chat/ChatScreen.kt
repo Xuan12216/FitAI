@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.xuan.fitai.data.model.ModelLoadState
 import com.xuan.fitai.ui.components.ThinkingContent
@@ -24,7 +25,8 @@ import com.xuan.fitai.ui.components.ThinkingContent
 @Composable
 fun ChatScreen(
     viewModel: ChatViewModel,
-    onNavigateToSetup: () -> Unit
+    onNavigateToSetup: () -> Unit,
+    bottomOverlayPadding: Dp = 0.dp,
 ) {
     val messages by viewModel.chatMessages.collectAsState()
     val isGenerating by viewModel.isGenerating.collectAsState()
@@ -43,6 +45,7 @@ fun ChatScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("本地 Gemma AI 助理", fontWeight = FontWeight.Bold) },
@@ -183,7 +186,7 @@ fun ChatScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp + bottomOverlayPadding),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {

@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import com.xuan.fitai.ai.GemmaOutputParser
 import com.xuan.fitai.ui.components.NutritionProgressCard
 import com.xuan.fitai.ui.components.ThinkingContent
@@ -27,7 +28,8 @@ fun DashboardScreen(
     viewModel: DashboardViewModel,
     onNavigateToScanner: () -> Unit,
     onNavigateToSetup: () -> Unit,
-    onResetOnboarding: () -> Unit
+    onResetOnboarding: () -> Unit,
+    bottomContentPadding: Dp = 0.dp,
 ) {
     val profile by viewModel.userProfile.collectAsState()
     val meals by viewModel.todayMeals.collectAsState()
@@ -54,6 +56,7 @@ fun DashboardScreen(
     val consumedFat = meals.sumOf { it.fat.toDouble() }.toFloat()
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("FitAI 健康儀表板", fontWeight = FontWeight.Bold) },
@@ -73,7 +76,7 @@ fun DashboardScreen(
                 .padding(innerPadding)
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(16.dp),
+                .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp + bottomContentPadding),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             

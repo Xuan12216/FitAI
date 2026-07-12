@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -35,9 +34,9 @@ fun LoadingDialog(
     ) {
         Surface(
             modifier = modifier,
-            shape = RoundedCornerShape(16.dp),
-            tonalElevation = 6.dp,
-            color = MaterialTheme.colorScheme.surface
+            shape = MaterialTheme.shapes.extraLarge,
+            tonalElevation = 8.dp,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh
         ) {
             Column(
                 modifier = Modifier

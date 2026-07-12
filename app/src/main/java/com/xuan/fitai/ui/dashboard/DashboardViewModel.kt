@@ -166,7 +166,7 @@ class DashboardViewModel(
             你是一位專業健康顧問。使用者目標是「${profile.goal}」。
             今日熱量目標為 ${profile.targetCalories.toInt()} kcal，已攝取 $totalCalories kcal。
             今日三大營養素已攝取：蛋白質 ${totalProtein.toInt()}g，碳水 ${totalCarbs.toInt()}g，脂肪 ${totalFat.toInt()}g。
-            請根據以上數據，只輸出一段 50 個中文字以內的繁體中文實用建議。
+            請根據以上數據，只輸出一段 150 個中文字以內的繁體中文實用建議。
         """.trimIndent()
 
         try {

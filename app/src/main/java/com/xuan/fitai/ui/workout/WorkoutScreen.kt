@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
@@ -32,7 +33,10 @@ import java.util.Calendar
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun WorkoutScreen(
-    viewModel: WorkoutViewModel
+    viewModel: WorkoutViewModel,
+    bottomContentPadding: Dp = 0.dp,
+    showAddWorkoutFab: Boolean = true,
+    workoutFabBottomPadding: Dp = 0.dp,
 ) {
     val profile by viewModel.userProfile.collectAsState()
     val plans by viewModel.workoutPlans.collectAsState()
@@ -87,6 +91,7 @@ fun WorkoutScreen(
         .take(4)
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("運動計畫", fontWeight = FontWeight.Bold) },
@@ -98,15 +103,18 @@ fun WorkoutScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    selectedPlanForEdit = null
-                    showAddEditDialog = true
-                },
-                containerColor = MaterialTheme.colorScheme.primary,
+            if (showAddWorkoutFab) {
+                FloatingActionButton(
+                    onClick = {
+                        selectedPlanForEdit = null
+                        showAddEditDialog = true
+                    },
+                    modifier = Modifier.padding(bottom = workoutFabBottomPadding),
+                    containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
                 Icon(imageVector = Icons.Default.Add, contentDescription = "新增運動")
+            }
             }
         }
     ) { innerPadding ->
@@ -135,7 +143,7 @@ fun WorkoutScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 80.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 80.dp + bottomContentPadding),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     if (isGenerating) {

@@ -8,7 +8,7 @@ plugins {
 
 android {
     namespace = "com.xuan.fitai"
-    compileSdk = 36
+    compileSdk = 37
     defaultConfig {
         applicationId = "com.xuan.fitai"
         minSdk = 31
