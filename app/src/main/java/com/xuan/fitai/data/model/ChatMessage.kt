@@ -8,5 +8,6 @@ data class ChatMessage(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val role: String, // "user" or "assistant"
     val content: String,
+    val audioBytes: ByteArray? = null,
     val timestamp: Long = System.currentTimeMillis()
 )

@@ -41,6 +41,9 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
     private val _visionReady = MutableStateFlow(false)
     override val visionReady: StateFlow<Boolean> = _visionReady.asStateFlow()
 
+    private val _audioReady = MutableStateFlow(false)
+    override val audioReady: StateFlow<Boolean> = _audioReady.asStateFlow()
+
     private var engine: Engine? = null
     private var conversationConfig: ConversationConfig? = null
 
@@ -81,12 +84,14 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             _loadState.value = ModelLoadState.NotFound
             _loadedModelName.value = null
             _visionReady.value = false
+            _audioReady.value = false
             return@withContext false
         }
 
         _loadState.value = ModelLoadState.Loading
         _loadedModelName.value = null
         _visionReady.value = false
+        _audioReady.value = false
 
         return@withContext modelMutex.withLock {
             try {
@@ -97,13 +102,20 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
 
                 engine = modelInstance.engine
                 _visionReady.value = modelInstance.visionEnabled
+                _audioReady.value = modelInstance.audioEnabled
                 _loadedModelName.value = modelName
                 _loadState.value = ModelLoadState.Loaded
-                android.util.Log.d("FitAI_Diag", "GemmaLocalHelperImpl: Loaded successfully! visionReady=${modelInstance.visionEnabled}")
+                android.util.Log.d(
+                    "FitAI_Diag",
+                    "GemmaLocalHelperImpl: Loaded successfully! " +
+                        "visionReady=${modelInstance.visionEnabled}, audioReady=${modelInstance.audioEnabled}"
+                )
                 true
             } catch (e: Exception) {
                 android.util.Log.e("FitAI_Diag", "GemmaLocalHelperImpl: Load failed!", e)
                 _loadedModelName.value = null
+                _visionReady.value = false
+                _audioReady.value = false
                 _loadState.value = ModelLoadState.Failed(e.localizedMessage ?: "載入失敗")
                 false
             }
@@ -182,6 +194,99 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
         }
     }.flowOn(Dispatchers.IO)
 
+    override fun generateReplyWithMediaFlow(
+        prompt: String,
+        image: Bitmap?,
+        audioBytes: ByteArray?,
+    ): kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.flow {
+        val mediaLabel = buildString {
+            if (image != null) append("image")
+            if (audioBytes?.isNotEmpty() == true) {
+                if (isNotEmpty()) append('+')
+                append("audio")
+            }
+        }
+        val inference = beginInference(
+            "generateReplyWithMediaFlow/${prompt.inferGemmaTaskType()}",
+            "media=$mediaLabel audio=${audioBytes?.takeIf { it.isNotEmpty() }?.let(::describeAudioBytes) ?: "none"} prompt=$prompt"
+        )
+        var locked = false
+        var tokenCount = 0
+        try {
+            modelMutex.lock()
+            locked = true
+            val currentConversation = createConversationForInference(inference)
+                ?: throw IllegalStateException("錯誤：Gemma 模型尚未載入。")
+            val responseFlow = if (image == null && audioBytes?.isNotEmpty() != true) {
+                currentConversation.sendMessageAsync(prompt)
+            } else {
+                currentConversation.sendMessageAsync(createMediaContents(prompt, image, audioBytes))
+            }
+            responseFlow.collect { token ->
+                tokenCount += 1
+                emit(token.toString())
+            }
+            android.util.Log.d(
+                "FitAI_GemmaReq",
+                "GemmaInference#${inference.id} completed media=$mediaLabel tokens=$tokenCount"
+            )
+        } catch (e: CancellationException) {
+            resetConversationAfterCancelledInference(inference)
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.e("FitAI_GemmaReq", "Gemma media inference failed", e)
+            resetReusableConversationIfRecoverableSessionError(inference, e)
+            throw e
+        } finally {
+            if (locked) modelMutex.unlock()
+            finishInference(inference)
+        }
+    }.flowOn(Dispatchers.IO)
+
+    private fun createMediaContents(
+        prompt: String,
+        image: Bitmap?,
+        audioBytes: ByteArray?,
+    ): Contents {
+        val contents = buildList<Content> {
+            image?.let { add(Content.ImageBytes(bitmapToPngBytes(it))) }
+            audioBytes?.takeIf { it.isNotEmpty() }?.let { add(Content.AudioBytes(it)) }
+            add(Content.Text(prompt))
+        }
+
+        return Contents.of(contents)
+    }
+
+    private fun bitmapToPngBytes(bitmap: Bitmap): ByteArray {
+        val outputStream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+        return outputStream.toByteArray()
+    }
+
+    private fun describeAudioBytes(bytes: ByteArray): String {
+        val riff = fourCc(bytes, 0)
+        val wave = fourCc(bytes, 8)
+        val format = fourCc(bytes, 12)
+        val sampleRate = readLittleEndianInt(bytes, 24)
+        val dataSize = readLittleEndianInt(bytes, 40)
+        val nonZeroBytes = bytes.drop(44).count { it != 0.toByte() }
+        return "bytes=${bytes.size},riff=$riff,wave=$wave,format=$format," +
+            "sampleRate=$sampleRate,dataSize=$dataSize,nonZeroBytes=$nonZeroBytes"
+    }
+
+    private fun fourCc(bytes: ByteArray, offset: Int): String {
+        if (offset < 0 || offset + 4 > bytes.size) return "?"
+        return String(bytes, offset, 4, Charsets.US_ASCII)
+    }
+
+    private fun readLittleEndianInt(bytes: ByteArray, offset: Int): Int {
+        if (offset < 0 || offset + 4 > bytes.size) return -1
+        return (bytes[offset].toInt() and 0xff) or
+            ((bytes[offset + 1].toInt() and 0xff) shl 8) or
+            ((bytes[offset + 2].toInt() and 0xff) shl 16) or
+            ((bytes[offset + 3].toInt() and 0xff) shl 24)
+    }
+
     override suspend fun analyzeFood(foodName: String, portion: String, goal: String): GemmaFoodAnalysis {
         val prompt = """
             You are a professional nutritionist. The user's goal is: $goal. The user just scanned: $foodName (portion: $portion).
@@ -259,9 +364,7 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             locked = true
             android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} mutex acquired")
             val currentConversation = createConversationForInference(inference) ?: return@withContext "未知食物"
-            val outputStream = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
-            val imageBytes = outputStream.toByteArray()
+            val imageBytes = bitmapToPngBytes(bitmap)
 
             val imageContent = Content.ImageBytes(imageBytes)
             val textContent = Content.Text(
@@ -269,13 +372,7 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
                 "看看這張圖片，圖中有什麼食物？只回答食物的繁體中文名稱，例如：雞蛋、薯條、雞胸肉。"
             )
 
-            // Contents constructor is `internal` — use reflection to bypass module boundary
-            @Suppress("UNCHECKED_CAST")
-            val contentsConstructor = Contents::class.java.getDeclaredConstructor(List::class.java)
-            contentsConstructor.isAccessible = true
-            val contents = contentsConstructor.newInstance(
-                listOf<Content>(imageContent, textContent)
-            ) as Contents
+            val contents = Contents.of(listOf<Content>(imageContent, textContent))
 
             val response = StringBuilder()
             currentConversation.sendMessageAsync(contents).collect { msg ->
@@ -312,9 +409,7 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             val currentConversation = createConversationForInference(inference)
                 ?: throw IllegalStateException("Gemma model is not loaded")
 
-            val outputStream = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
-            val imageBytes = outputStream.toByteArray()
+            val imageBytes = bitmapToPngBytes(bitmap)
 
             val imageContent = Content.ImageBytes(imageBytes)
             val textContent = Content.Text(
@@ -322,12 +417,7 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
                     "If no food is visible, output 無食物."
             )
 
-            @Suppress("UNCHECKED_CAST")
-            val contentsConstructor = Contents::class.java.getDeclaredConstructor(List::class.java)
-            contentsConstructor.isAccessible = true
-            val contents = contentsConstructor.newInstance(
-                listOf<Content>(imageContent, textContent)
-            ) as Contents
+            val contents = Contents.of(listOf<Content>(imageContent, textContent))
 
             var tokenCount = 0
             currentConversation.sendMessageAsync(contents).collect { token ->
@@ -514,11 +604,13 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
         conversationConfig = null
         engine = null
         _visionReady.value = false
+        _audioReady.value = false
     }
 
     private data class ModelInstance(
         val engine: Engine,
-        val visionEnabled: Boolean
+        val visionEnabled: Boolean,
+        val audioEnabled: Boolean,
     )
 
     private fun createInitializedConversation(modelPath: String): ModelInstance {
@@ -542,28 +634,90 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
         // Backend candidate configurations list
         val configs = if (useGpu) {
             listOf(
-                EngineConfig(modelPath = modelPath, backend = Backend.GPU(), visionBackend = Backend.GPU(), maxNumTokens = maxTokens) to true,
-                EngineConfig(modelPath = modelPath, backend = Backend.GPU(), maxNumTokens = maxTokens) to false,
-                EngineConfig(modelPath = modelPath, backend = Backend.CPU(), maxNumTokens = maxTokens) to false
+                Triple(
+                    EngineConfig(
+                        modelPath = modelPath,
+                        backend = Backend.GPU(),
+                        visionBackend = Backend.GPU(),
+                        audioBackend = Backend.CPU(),
+                        maxNumTokens = maxTokens,
+                    ),
+                    true,
+                    true,
+                ),
+                Triple(
+                    EngineConfig(modelPath = modelPath, backend = Backend.GPU(), visionBackend = Backend.GPU(), maxNumTokens = maxTokens),
+                    true,
+                    false,
+                ),
+                Triple(
+                    EngineConfig(modelPath = modelPath, backend = Backend.GPU(), maxNumTokens = maxTokens),
+                    false,
+                    false,
+                ),
+                Triple(
+                    EngineConfig(modelPath = modelPath, backend = Backend.CPU(), maxNumTokens = maxTokens),
+                    false,
+                    false,
+                ),
             )
         } else {
             listOf(
-                EngineConfig(modelPath = modelPath, backend = Backend.CPU(), visionBackend = Backend.GPU(), maxNumTokens = maxTokens) to true,
-                EngineConfig(modelPath = modelPath, backend = Backend.CPU(), visionBackend = Backend.CPU(), maxNumTokens = maxTokens) to true,
-                EngineConfig(modelPath = modelPath, backend = Backend.CPU(), maxNumTokens = maxTokens) to false
+                Triple(
+                    EngineConfig(
+                        modelPath = modelPath,
+                        backend = Backend.CPU(),
+                        visionBackend = Backend.GPU(),
+                        audioBackend = Backend.CPU(),
+                        maxNumTokens = maxTokens,
+                    ),
+                    true,
+                    true,
+                ),
+                Triple(
+                    EngineConfig(
+                        modelPath = modelPath,
+                        backend = Backend.CPU(),
+                        visionBackend = Backend.CPU(),
+                        audioBackend = Backend.CPU(),
+                        maxNumTokens = maxTokens,
+                    ),
+                    true,
+                    true,
+                ),
+                Triple(
+                    EngineConfig(modelPath = modelPath, backend = Backend.CPU(), visionBackend = Backend.GPU(), maxNumTokens = maxTokens),
+                    true,
+                    false,
+                ),
+                Triple(
+                    EngineConfig(modelPath = modelPath, backend = Backend.CPU(), visionBackend = Backend.CPU(), maxNumTokens = maxTokens),
+                    true,
+                    false,
+                ),
+                Triple(
+                    EngineConfig(modelPath = modelPath, backend = Backend.CPU(), maxNumTokens = maxTokens),
+                    false,
+                    false,
+                ),
             )
         }
 
         var lastError: Exception? = null
-        for ((config, visionEnabled) in configs) {
+        for ((config, visionEnabled, audioEnabled) in configs) {
             var candidateEngine: Engine? = null
             try {
-                android.util.Log.d("FitAI_Diag", "Trying config: backend=${config.backend}, vision=${config.visionBackend}, maxTokens=${config.maxNumTokens}")
+                android.util.Log.d(
+                    "FitAI_Diag",
+                    "Trying config: backend=${config.backend}, " +
+                        "vision=${config.visionBackend}, audio=${config.audioBackend}, " +
+                        "maxTokens=${config.maxNumTokens}"
+                )
                 candidateEngine = Engine(config).also { it.initialize() }
                 candidateEngine.createConversation(conversationConfig).close()
                 android.util.Log.d("FitAI_GemmaReq", "Created conversation thinking=$thinking")
                 this.conversationConfig = conversationConfig
-                return ModelInstance(candidateEngine, visionEnabled)
+                return ModelInstance(candidateEngine, visionEnabled, audioEnabled)
             } catch (e: Exception) {
                 lastError = e
                 android.util.Log.w("FitAI_Diag", "Gemma engine/conversation init failed, trying fallback config", e)
@@ -577,12 +731,7 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
     }
 
     private fun createConversationConfig(systemPrompt: String, thinking: Boolean): ConversationConfig {
-        @Suppress("UNCHECKED_CAST")
-        val contentsConstructor = Contents::class.java.getDeclaredConstructor(List::class.java)
-        contentsConstructor.isAccessible = true
-        val systemInstructionContents = contentsConstructor.newInstance(
-            listOf<Content>(Content.Text(systemPrompt))
-        ) as Contents
+        val systemInstructionContents = Contents.of(listOf<Content>(Content.Text(systemPrompt)))
 
         val topK = runBlocking { userPreferenceStore.topKFlow.first() }
         val topP = runBlocking { userPreferenceStore.topPFlow.first() }

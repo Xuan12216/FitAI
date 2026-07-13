@@ -1,5 +1,6 @@
 package com.xuan.fitai.ui.chat
 
+import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -42,6 +43,8 @@ class ChatViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val gemmaLoadState = gemmaHelper.loadState
+    val visionReady = gemmaHelper.visionReady
+    val audioReady = gemmaHelper.audioReady
 
     private val _isGenerating = MutableStateFlow(false)
     val isGenerating: StateFlow<Boolean> = _isGenerating.asStateFlow()
@@ -53,8 +56,13 @@ class ChatViewModel(
     private val _errorMsg = MutableStateFlow<String?>(null)
     val errorMsg: StateFlow<String?> = _errorMsg.asStateFlow()
 
-    fun sendMessage(userMessage: String) {
-        if (userMessage.isBlank()) return
+    fun sendMessage(
+        userMessage: String,
+        image: Bitmap? = null,
+        audioBytes: ByteArray? = null,
+    ) {
+        if (userMessage.isBlank() && image == null && audioBytes?.isNotEmpty() != true) return
+        if (_isGenerating.value) return
 
         viewModelScope.launch {
             _errorMsg.value = null
@@ -63,8 +71,49 @@ class ChatViewModel(
                 return@launch
             }
 
+            if (image != null && !visionReady.value) {
+                _errorMsg.value = "目前載入的 Gemma 模型不支援圖片辨識"
+                return@launch
+            }
+            if (audioBytes?.isNotEmpty() == true && !audioReady.value) {
+                _errorMsg.value = "目前載入的 Gemma 模型不支援語音辨識"
+                return@launch
+            }
+
+            val hasAudio = audioBytes?.isNotEmpty() == true
+            val mediaInstruction = when {
+                image != null && hasAudio ->
+                    "請實際查看附上的圖片並聆聽附上的語音。先轉寫語音，再結合圖片內容回答。"
+                image != null ->
+                    "請實際查看附上的圖片，描述你看到的內容並回答。"
+                hasAudio ->
+                    "請實際聆聽附上的語音，先轉寫語音內容，再根據內容回答。不要假設沒有語音。"
+                else -> ""
+            }
+            val promptText = userMessage.trim().ifBlank {
+                mediaInstruction.ifBlank { "請用繁體中文回答。" }
+            }
+            val promptForModel = if (mediaInstruction.isNotBlank() && userMessage.isNotBlank()) {
+                "$mediaInstruction\n${userMessage.trim()}"
+            } else {
+                promptText
+            }
+            val storedUserContent = buildString {
+                if (userMessage.isNotBlank()) {
+                    append(userMessage.trim())
+                } else if (image != null) {
+                    append("圖片")
+                } else if (audioBytes?.isNotEmpty() == true) {
+                    append("語音")
+                }
+            }.ifBlank { promptText }
+
             // Insert User Message
-            val userMsgObj = ChatMessage(role = "user", content = userMessage)
+            val userMsgObj = ChatMessage(
+                role = "user",
+                content = storedUserContent,
+                audioBytes = audioBytes,
+            )
             chatDao.insertMessage(userMsgObj)
 
             _isGenerating.value = true
@@ -84,11 +133,20 @@ class ChatViewModel(
                     todayProtein = prot,
                     todayCarbs = carb,
                     todayFat = fat,
-                    userMessage = userMessage
+                    userMessage = promptForModel
                 )
 
                 var currentText = ""
-                gemmaHelper.generateReplyFlow(fullPrompt).collect { token ->
+                val responseFlow = if (image != null || audioBytes?.isNotEmpty() == true) {
+                    gemmaHelper.generateReplyWithMediaFlow(
+                        prompt = fullPrompt,
+                        image = image,
+                        audioBytes = audioBytes,
+                    )
+                } else {
+                    gemmaHelper.generateReplyFlow(fullPrompt)
+                }
+                responseFlow.collect { token ->
                     if (_streamingMessage.value == null) {
                         _streamingMessage.value = ChatMessage(role = "assistant", content = "")
                     }
