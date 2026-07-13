@@ -24,7 +24,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.xuan.fitai.data.model.LocalModelInfo
 import com.xuan.fitai.data.model.ModelDownloadState
 import com.xuan.fitai.data.model.ModelLoadState
 import com.xuan.fitai.data.model.ModelType
@@ -199,7 +198,10 @@ fun ModelConfigDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Tab Header
-                TabRow(selectedTabIndex = selectedTab) {
+                SecondaryTabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                ) {
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
@@ -218,7 +220,6 @@ fun ModelConfigDialog(
                     // Max tokens (2000-32000)
                     IntSliderInputRow(
                         label = "Max tokens (2000-32000)",
-                        zhLabel = "最大 Token 數量",
                         description = "限制模型單次輸出的最大字數上限，防止生成內容過長。",
                         value = maxTokens,
                         valueRange = 2000..32000,
@@ -228,7 +229,6 @@ fun ModelConfigDialog(
                     // TopK (5-100)
                     IntSliderInputRow(
                         label = "TopK (5-100)",
-                        zhLabel = "TopK 候選詞數量限制",
                         description = "僅從機率最高的前 K 個詞中進行隨機篩選，數值越高輸出越隨機多變。",
                         value = topK,
                         valueRange = 5..100,
@@ -238,7 +238,6 @@ fun ModelConfigDialog(
                     // TopP (0.00-1.00)
                     SliderInputRow(
                         label = "TopP (0.00-1.00)",
-                        zhLabel = "TopP 累積機率限制",
                         description = "篩選累積機率達到 P 的候選詞，控制答案的多樣性與發散度。",
                         value = topP,
                         valueRange = 0.0f..1.0f,
@@ -248,7 +247,6 @@ fun ModelConfigDialog(
                     // Temperature (0.00-2.00)
                     SliderInputRow(
                         label = "Temperature (0.00-2.00)",
-                        zhLabel = "Temperature 隨機度 (溫度)",
                         description = "控制生成內容的創意與自由度。數值越高越有創意，越低越精確嚴謹。",
                         value = temp,
                         valueRange = 0.0f..2.0f,
@@ -400,7 +398,7 @@ fun AcceleratorToggle(
 @Composable
 fun SliderInputRow(
     label: String,
-    zhLabel: String,
+    zhLabel: String = "",
     description: String,
     value: Float,
     valueRange: ClosedFloatingPointRange<Float>,
@@ -455,7 +453,7 @@ fun SliderInputRow(
 @Composable
 fun IntSliderInputRow(
     label: String,
-    zhLabel: String,
+    zhLabel: String = "",
     description: String,
     value: Int,
     valueRange: ClosedRange<Int>,

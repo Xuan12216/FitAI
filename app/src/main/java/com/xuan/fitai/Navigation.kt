@@ -314,7 +314,7 @@ private fun FloatingDestinationToolbar(
         expanded = true,
         modifier = modifier,
         colors = FloatingToolbarDefaults.standardFloatingToolbarColors(
-            toolbarContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            toolbarContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             toolbarContentColor = MaterialTheme.colorScheme.onSurface,
         ),
     ) {
@@ -325,14 +325,14 @@ private fun FloatingDestinationToolbar(
                     onClick = { onNavigate(destination.route) },
                     contentPadding = PaddingValues(horizontal = 12.dp),
                     colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     ),
                 ) {
                     Icon(
                         imageVector = destination.icon,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurface,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(destination.label)
