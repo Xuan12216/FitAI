@@ -196,11 +196,11 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
 
     override fun generateReplyWithMediaFlow(
         prompt: String,
-        image: Bitmap?,
+        images: List<Bitmap>,
         audioBytes: ByteArray?,
     ): kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.flow {
         val mediaLabel = buildString {
-            if (image != null) append("image")
+            if (images.isNotEmpty()) append("images=${images.size}")
             if (audioBytes?.isNotEmpty() == true) {
                 if (isNotEmpty()) append('+')
                 append("audio")
@@ -217,10 +217,10 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             locked = true
             val currentConversation = createConversationForInference(inference)
                 ?: throw IllegalStateException("錯誤：Gemma 模型尚未載入。")
-            val responseFlow = if (image == null && audioBytes?.isNotEmpty() != true) {
+            val responseFlow = if (images.isEmpty() && audioBytes?.isNotEmpty() != true) {
                 currentConversation.sendMessageAsync(prompt)
             } else {
-                currentConversation.sendMessageAsync(createMediaContents(prompt, image, audioBytes))
+                currentConversation.sendMessageAsync(createMediaContents(prompt, images, audioBytes))
             }
             responseFlow.collect { token ->
                 tokenCount += 1
@@ -245,13 +245,15 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
 
     private fun createMediaContents(
         prompt: String,
-        image: Bitmap?,
+        images: List<Bitmap>,
         audioBytes: ByteArray?,
     ): Contents {
         val contents = buildList<Content> {
-            image?.let { add(Content.ImageBytes(bitmapToPngBytes(it))) }
-            audioBytes?.takeIf { it.isNotEmpty() }?.let { add(Content.AudioBytes(it)) }
+            images.forEach { add(Content.ImageBytes(bitmapToPngBytes(it))) }
+            // Gemma 4 expects audio after the text content. Keep image before text,
+            // then append the recorded WAV bytes after the instruction.
             add(Content.Text(prompt))
+            audioBytes?.takeIf { it.isNotEmpty() }?.let { add(Content.AudioBytes(it)) }
         }
 
         return Contents.of(contents)

@@ -10,6 +10,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,10 +23,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
@@ -31,17 +38,21 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Divider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,12 +63,16 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.carousel.HorizontalMultiBrowseCarousel
+import androidx.compose.material3.carousel.rememberCarouselState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -65,12 +80,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.xuan.fitai.data.model.ModelLoadState
 import com.xuan.fitai.ui.components.AppLoadingIndicator
@@ -85,6 +108,8 @@ fun ChatScreen(
     viewModel: ChatViewModel,
     onNavigateToSetup: () -> Unit,
     bottomOverlayPadding: Dp = 0.dp,
+    isToolsBarVisible: Boolean = false,
+    onToggleToolsBar: () -> Unit = {},
 ) {
     val messages by viewModel.chatMessages.collectAsState()
     val isGenerating by viewModel.isGenerating.collectAsState()
@@ -98,11 +123,15 @@ fun ChatScreen(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     var inputQuery by remember { mutableStateOf("") }
-    var selectedImage by remember { mutableStateOf<Bitmap?>(null) }
+    var selectedImages by remember { mutableStateOf<List<Bitmap>>(emptyList()) }
+    var viewerImages by remember { mutableStateOf<List<Bitmap>>(emptyList()) }
+    var previewImageIndex by remember { mutableStateOf<Int?>(null) }
     var audioBytes by remember { mutableStateOf<ByteArray?>(null) }
     var isRecording by remember { mutableStateOf(false) }
     var playingAudioId by remember { mutableStateOf<Int?>(null) }
     var mediaError by remember { mutableStateOf<String?>(null) }
+    var hasAppliedInitialScroll by remember { mutableStateOf(false) }
+    var showAttachmentMenu by remember { mutableStateOf(false) }
     var cameraPermissionGranted by remember {
         mutableStateOf(hasPermission(context, Manifest.permission.CAMERA))
     }
@@ -111,24 +140,28 @@ fun ChatScreen(
     }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri ?: return@rememberLauncherForActivityResult
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
         scope.launch {
-            val bitmap = withContext(Dispatchers.IO) { decodeChatBitmap(context, uri) }
-            if (bitmap == null) {
+            val bitmaps = withContext(Dispatchers.IO) {
+                uris.mapNotNull { decodeChatBitmap(context, it) }
+            }
+            if (bitmaps.isEmpty()) {
                 mediaError = "無法讀取這張圖片"
             } else {
-                selectedImage = bitmap
-                mediaError = null
+                selectedImages = selectedImages + bitmaps
+                mediaError = if (bitmaps.size == uris.size) null else "??敺蝪輸???"
             }
         }
     }
     val cameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicturePreview()
     ) { bitmap: Bitmap? ->
-        selectedImage = bitmap?.scaleForChat()
-        if (bitmap != null) mediaError = null
+        bitmap?.scaleForChat()?.let {
+            selectedImages = selectedImages + it
+            mediaError = null
+        }
     }
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -162,19 +195,33 @@ fun ChatScreen(
     }
 
     fun sendCurrentMessage() {
-        val hasAttachment = selectedImage != null || audioBytes?.isNotEmpty() == true
+        val hasAttachment = selectedImages.isNotEmpty() || audioBytes?.isNotEmpty() == true
         if (isGenerating || isRecording || (inputQuery.isBlank() && !hasAttachment)) return
         audioPlayer.stop { playingAudioId = it }
-        viewModel.sendMessage(inputQuery, selectedImage, audioBytes)
+        viewModel.sendMessage(inputQuery, selectedImages, audioBytes)
         inputQuery = ""
-        selectedImage = null
+        selectedImages = emptyList()
+        previewImageIndex = null
+        viewerImages = emptyList()
         audioBytes = null
         mediaError = null
     }
 
+    val isChatAtBottom by remember {
+        derivedStateOf { !listState.canScrollForward }
+    }
+
     LaunchedEffect(messages.size, messages.lastOrNull()?.content) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
+        if (messages.isEmpty()) {
+            hasAppliedInitialScroll = false
+            return@LaunchedEffect
+        }
+
+        // Follow generation only while the user is already at the bottom. This
+        // lets the user read older messages without being pulled back each token.
+        if (!hasAppliedInitialScroll || isChatAtBottom) {
+            listState.scrollToItem(messages.lastIndex)
+            hasAppliedInitialScroll = true
         }
     }
 
@@ -269,10 +316,29 @@ fun ChatScreen(
                                     .padding(12.dp)
                                     .widthIn(max = 280.dp)
                             ) {
+                                val messageImages by produceState<List<Bitmap>>(
+                                    initialValue = emptyList(),
+                                    msg.id,
+                                    msg.imageBytes,
+                                ) {
+                                    value = withContext(Dispatchers.Default) {
+                                        ChatImageCodec.decode(msg.imageBytes)
+                                    }
+                                }
                                 if (isUser) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        if (messageImages.isNotEmpty()) {
+                                            ChatImageCarousel(
+                                                images = messageImages,
+                                                onImageClick = {
+                                                    viewerImages = messageImages
+                                                    previewImageIndex = it
+                                                },
+                                            )
+                                        }
                                     if (msg.audioBytes?.isNotEmpty() == true) {
                                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            if (msg.content.isNotBlank() && msg.content != "語音") {
+                                            if (msg.content.isNotBlank() && msg.content != "語音" && msg.content != "圖片") {
                                                 Text(
                                                     text = msg.content,
                                                     color = MaterialTheme.colorScheme.onPrimary,
@@ -290,12 +356,13 @@ fun ChatScreen(
                                                 },
                                             )
                                         }
-                                    } else {
+                                    } else if (msg.content != "圖片" || messageImages.isEmpty()) {
                                         Text(
                                             text = msg.content,
                                             color = MaterialTheme.colorScheme.onPrimary,
                                             style = MaterialTheme.typography.bodyMedium
                                         )
+                                    }
                                     }
                                 } else {
                                     ThinkingContent(
@@ -343,64 +410,71 @@ fun ChatScreen(
                         .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 12.dp + bottomOverlayPadding),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (selectedImage != null || audioBytes?.isNotEmpty() == true) {
+                    if (selectedImages.isNotEmpty() || audioBytes?.isNotEmpty() == true) {
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceContainerHighest,
                             shape = MaterialTheme.shapes.medium,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Row(
+                            Column(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                selectedImage?.let { bitmap ->
-                                    Image(
-                                        bitmap = bitmap.asImageBitmap(),
-                                        contentDescription = "已選取的圖片",
-                                        modifier = Modifier
-                                            .size(48.dp)
-                                            .clip(MaterialTheme.shapes.small)
+                                if (selectedImages.isNotEmpty()) {
+                                    ChatImageCarousel(
+                                        images = selectedImages,
+                                        onImageClick = {
+                                            viewerImages = selectedImages
+                                            previewImageIndex = it
+                                        },
+                                        onRemoveImage = { index ->
+                                            selectedImages = selectedImages.filterIndexed { i, _ -> i != index }
+                                        },
                                     )
-                                    Text("圖片", style = MaterialTheme.typography.labelLarge)
-                                    IconButton(onClick = { selectedImage = null }) {
-                                        Icon(Icons.Default.Close, contentDescription = "移除圖片")
-                                    }
                                 }
                                 if (audioBytes?.isNotEmpty() == true) {
-                                    IconButton(
-                                        onClick = {
-                                            audioPlayer.toggle(
-                                                id = PREVIEW_AUDIO_ID,
-                                                audioBytes = audioBytes!!,
-                                                onPlayingChanged = { playingAudioId = it },
-                                            )
-                                        },
-                                        modifier = Modifier.size(40.dp),
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     ) {
-                                        Icon(
-                                            imageVector = if (playingAudioId == PREVIEW_AUDIO_ID) {
-                                                Icons.Default.Stop
-                                            } else {
-                                                Icons.Default.PlayArrow
+                                        IconButton(
+                                            onClick = {
+                                                audioPlayer.toggle(
+                                                    id = PREVIEW_AUDIO_ID,
+                                                    audioBytes = audioBytes!!,
+                                                    onPlayingChanged = { playingAudioId = it },
+                                                )
                                             },
-                                            contentDescription = if (playingAudioId == PREVIEW_AUDIO_ID) {
-                                                "停止播放語音"
-                                            } else {
-                                                "播放語音"
-                                            },
+                                            modifier = Modifier.size(40.dp),
+                                        ) {
+                                            Icon(
+                                                imageVector = if (playingAudioId == PREVIEW_AUDIO_ID) {
+                                                    Icons.Default.Stop
+                                                } else {
+                                                    Icons.Default.PlayArrow
+                                                },
+                                                contentDescription = if (playingAudioId == PREVIEW_AUDIO_ID) {
+                                                    "停止播放語音"
+                                                } else {
+                                                    "播放語音"
+                                                },
+                                            )
+                                        }
+                                        Icon(Icons.Default.GraphicEq, contentDescription = null)
+                                        Text(
+                                            "語音 (${audioBytes!!.size / 1024} KB)",
+                                            style = MaterialTheme.typography.labelLarge,
                                         )
-                                    }
-                                    Icon(Icons.Default.GraphicEq, contentDescription = null)
-                                    Text(
-                                        "語音 (${audioBytes!!.size / 1024} KB)",
-                                        style = MaterialTheme.typography.labelLarge
-                                    )
-                                    IconButton(onClick = {
-                                        audioPlayer.stop { playingAudioId = it }
-                                        audioBytes = null
-                                    }) {
-                                        Icon(Icons.Default.Close, contentDescription = "移除語音")
+                                        IconButton(
+                                            onClick = {
+                                                audioPlayer.stop { playingAudioId = it }
+                                                audioBytes = null
+                                            },
+                                        ) {
+                                            Icon(Icons.Default.Close, contentDescription = "移除語音")
+                                        }
                                     }
                                 }
                             }
@@ -416,41 +490,85 @@ fun ChatScreen(
                         )
                     }
 
-                    Surface(
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(34.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        tonalElevation = 3.dp,
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
+                        IconButton(
+                            onClick = onToggleToolsBar,
+                            enabled = !isGenerating,
+                            colors = IconButtonDefaults.iconButtonColors(
+                                contentColor = if (isToolsBarVisible) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                                containerColor = if (isToolsBarVisible) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    Color.Transparent
+                                },
+                            ),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Tune,
+                                contentDescription = if (isToolsBarVisible) "隱藏功能列" else "顯示功能列",
+                            )
+                        }
+
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(36.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            tonalElevation = 1.dp,
+                        ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                            modifier = Modifier
+                                .heightIn(min = 58.dp)
+                                .padding(horizontal = 6.dp, vertical = 5.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            IconButton(
-                                onClick = { imagePickerLauncher.launch("image/*") },
-                                enabled = !isGenerating && visionReady,
-                                colors = IconButtonDefaults.iconButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                                    disabledContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.38f),
-                                )
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = "從相簿加入圖片")
-                            }
-                            IconButton(
-                                onClick = {
-                                    if (cameraPermissionGranted) {
-                                        cameraLauncher.launch(null)
-                                    } else {
-                                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                                    }
-                                },
-                                enabled = !isGenerating && visionReady,
-                                colors = IconButtonDefaults.iconButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                                    disabledContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.38f),
-                                )
-                            ) {
-                                Icon(Icons.Default.CameraAlt, contentDescription = "拍攝圖片")
+                            Box {
+                                IconButton(
+                                    onClick = { showAttachmentMenu = true },
+                                    enabled = !isGenerating && visionReady,
+                                    colors = IconButtonDefaults.iconButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.onSurface,
+                                        disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                                    )
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = "加入圖片或拍攝照片")
+                                }
+                                DropdownMenu(
+                                    expanded = showAttachmentMenu,
+                                    onDismissRequest = { showAttachmentMenu = false },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("從相簿選取") },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.PhotoLibrary, contentDescription = null)
+                                        },
+                                        onClick = {
+                                            showAttachmentMenu = false
+                                            imagePickerLauncher.launch("image/*")
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("拍攝照片") },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.CameraAlt, contentDescription = null)
+                                        },
+                                        onClick = {
+                                            showAttachmentMenu = false
+                                            if (cameraPermissionGranted) {
+                                                cameraLauncher.launch(null)
+                                            } else {
+                                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                            }
+                                        },
+                                    )
+                                }
                             }
                             IconButton(
                                 onClick = {
@@ -479,77 +597,277 @@ fun ChatScreen(
                                 enabled = !isGenerating && (audioReady || isRecording),
                                 colors = IconButtonDefaults.iconButtonColors(
                                     contentColor = if (isRecording) {
-                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                        MaterialTheme.colorScheme.onErrorContainer
                                     } else {
-                                        MaterialTheme.colorScheme.onPrimary
+                                        MaterialTheme.colorScheme.onSurface
                                     },
+                                    disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
                                     containerColor = if (isRecording) {
-                                        MaterialTheme.colorScheme.primaryContainer
+                                        MaterialTheme.colorScheme.errorContainer
                                     } else {
                                         Color.Transparent
                                     },
                                 )
                             ) {
                                 Icon(
-                                    imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.GraphicEq,
+                                    imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.Mic,
                                     contentDescription = if (isRecording) "停止錄音" else "錄製語音",
                                 )
                             }
 
-                            val hasAttachment = selectedImage != null || audioBytes?.isNotEmpty() == true
-                            Surface(
+                            OutlinedTextField(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .heightIn(min = 54.dp),
-                                shape = RoundedCornerShape(28.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                            ) {
-                                OutlinedTextField(
-                                    value = inputQuery,
-                                    onValueChange = { inputQuery = it },
-                                    placeholder = { Text("輸入訊息...") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    maxLines = 3,
-                                    enabled = !isGenerating,
-                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                                    keyboardActions = KeyboardActions(onSend = { sendCurrentMessage() }),
-                                    trailingIcon = {
-                                        IconButton(
-                                            onClick = { sendCurrentMessage() },
-                                            enabled = !isGenerating &&
-                                                (inputQuery.isNotBlank() || hasAttachment),
-                                        ) {
-                                            Icon(
-                                                imageVector = if (inputQuery.isNotBlank() || hasAttachment) {
-                                                    Icons.Default.Send
-                                                } else {
-                                                    Icons.Default.EmojiEmotions
-                                                },
-                                                contentDescription = if (inputQuery.isNotBlank() || hasAttachment) {
-                                                    "送出訊息"
-                                                } else {
-                                                    "表情符號"
-                                                },
-                                            )
-                                        }
-                                    },
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedContainerColor = Color.Transparent,
-                                        unfocusedContainerColor = Color.Transparent,
-                                        disabledContainerColor = Color.Transparent,
-                                        errorContainerColor = Color.Transparent,
-                                        focusedBorderColor = Color.Transparent,
-                                        unfocusedBorderColor = Color.Transparent,
-                                        disabledBorderColor = Color.Transparent,
-                                        errorBorderColor = Color.Transparent,
-                                    ),
-                                )
-                            }
+                                    .heightIn(min = 48.dp),
+                                value = inputQuery,
+                                onValueChange = { inputQuery = it },
+                                placeholder = { Text("輸入訊息...") },
+                                maxLines = 3,
+                                enabled = !isGenerating,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                                keyboardActions = KeyboardActions(onSend = { sendCurrentMessage() }),
+                                trailingIcon = {
+                                    IconButton(
+                                        onClick = { sendCurrentMessage() },
+                                        enabled = !isGenerating && (
+                                            inputQuery.isNotBlank() ||
+                                                selectedImages.isNotEmpty() ||
+                                                audioBytes?.isNotEmpty() == true
+                                            ),
+                                        colors = IconButtonDefaults.iconButtonColors(
+                                            contentColor = if (
+                                                inputQuery.isNotBlank() ||
+                                                    selectedImages.isNotEmpty() ||
+                                                    audioBytes?.isNotEmpty() == true
+                                            ) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                            disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                                        ),
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.Send,
+                                            contentDescription = "送出訊息",
+                                        )
+                                    }
+                                },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                    disabledTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                    focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                                    focusedTrailingIconColor = MaterialTheme.colorScheme.onSurface,
+                                    unfocusedTrailingIconColor = MaterialTheme.colorScheme.onSurface,
+                                    disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    disabledContainerColor = Color.Transparent,
+                                    errorContainerColor = Color.Transparent,
+                                    focusedBorderColor = Color.Transparent,
+                                    unfocusedBorderColor = Color.Transparent,
+                                    disabledBorderColor = Color.Transparent,
+                                    errorBorderColor = Color.Transparent,
+                                ),
+                            )
                         }
                     }
                 }
+                }
             }
         }
+    }
+
+    previewImageIndex?.let { index ->
+        if (viewerImages.isNotEmpty()) {
+            ChatImageViewer(
+                images = viewerImages,
+                initialIndex = index,
+                onDismiss = {
+                    previewImageIndex = null
+                    viewerImages = emptyList()
+                },
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChatImageCarousel(
+    images: List<Bitmap>,
+    onImageClick: (Int) -> Unit,
+    onRemoveImage: ((Int) -> Unit)? = null,
+) {
+    val carouselState = rememberCarouselState { images.size }
+
+    HorizontalMultiBrowseCarousel(
+        state = carouselState,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(112.dp),
+        preferredItemWidth = 112.dp,
+        itemSpacing = 8.dp,
+        contentPadding = PaddingValues(horizontal = 4.dp),
+    ) { index ->
+        Box(modifier = Modifier.fillMaxSize()) {
+            Image(
+                bitmap = images[index].asImageBitmap(),
+                contentDescription = "?? ${index + 1}",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(MaterialTheme.shapes.small)
+                    .clickable { onImageClick(index) },
+            )
+            if (onRemoveImage != null) {
+                Surface(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(4.dp)
+                    .size(28.dp),
+                shape = RoundedCornerShape(14.dp),
+                color = Color.Black.copy(alpha = 0.55f),
+            ) {
+                IconButton(
+                    onClick = { onRemoveImage(index) },
+                    modifier = Modifier.size(28.dp),
+                    colors = IconButtonDefaults.iconButtonColors(
+                        contentColor = Color.White,
+                    ),
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "蝘駁??",
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatImageViewer(
+    images: List<Bitmap>,
+    initialIndex: Int,
+    onDismiss: () -> Unit,
+) {
+    val pagerState = rememberPagerState(
+        initialPage = initialIndex.coerceIn(0, images.lastIndex),
+        pageCount = { images.size },
+    )
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            shape = RoundedCornerShape(0.dp),
+            color = Color.Black,
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                ) { page ->
+                    ZoomableChatImage(
+                        bitmap = images[page],
+                        contentDescription = "?? ${page + 1}",
+                    )
+                }
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp),
+                    colors = IconButtonDefaults.iconButtonColors(
+                        contentColor = Color.White,
+                        containerColor = Color.Black.copy(alpha = 0.55f),
+                    ),
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = "蝘駁")
+                }
+                if (images.size > 1) {
+                    Text(
+                        text = "${pagerState.currentPage + 1} / ${images.size}",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 12.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ZoomableChatImage(
+    bitmap: Bitmap,
+    contentDescription: String,
+) {
+    var scale by remember { mutableStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    var containerSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+
+    val transformState = rememberTransformableState { zoomChange, panChange, _ ->
+        val newScale = (scale * zoomChange).coerceIn(1f, 5f)
+        scale = newScale
+
+        if (newScale <= 1f) {
+            offset = Offset.Zero
+        } else {
+            val maxX = containerSize.width * (newScale - 1f) / 2f
+            val maxY = containerSize.height * (newScale - 1f) / 2f
+            offset = Offset(
+                x = (offset.x + panChange.x).coerceIn(-maxX, maxX),
+                y = (offset.y + panChange.y).coerceIn(-maxY, maxY),
+            )
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clipToBounds()
+            .onSizeChanged { containerSize = it }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onDoubleTap = {
+                        scale = if (scale > 1f) 1f else 2.5f
+                        if (scale == 1f) offset = Offset.Zero
+                    },
+                )
+            }
+            .transformable(
+                state = transformState,
+                canPan = { scale > 1f },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = contentDescription,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    translationX = offset.x
+                    translationY = offset.y
+                },
+        )
     }
 }
 

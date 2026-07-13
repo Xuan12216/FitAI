@@ -15,7 +15,7 @@ interface GemmaLocalHelper {
     fun generateReplyFlow(prompt: String): kotlinx.coroutines.flow.Flow<String>
     fun generateReplyWithMediaFlow(
         prompt: String,
-        image: Bitmap? = null,
+        images: List<Bitmap> = emptyList(),
         audioBytes: ByteArray? = null,
     ): kotlinx.coroutines.flow.Flow<String> = generateReplyFlow(prompt)
     suspend fun analyzeFood(foodName: String, portion: String, goal: String): GemmaFoodAnalysis

@@ -1,9 +1,19 @@
 package com.xuan.fitai
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -90,9 +100,23 @@ fun MainNavigation(
         BottomDestination("reminders", "提醒", Icons.Default.Notifications)
     )
 
-    val showFloatingToolbar = isOnboardingCompleted == true && primaryDestinations.any { it.route == currentRoute }
+    val isPrimaryRoute = primaryDestinations.any { it.route == currentRoute }
+    var isFloatingToolbarVisible by rememberSaveable { mutableStateOf(true) }
+    val showFloatingToolbar = isOnboardingCompleted == true && isPrimaryRoute && isFloatingToolbarVisible
     val navigationBarHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val toolbarContentPadding = FloatingToolbarDefaults.ContainerSize + navigationBarHeight + 8.dp
+    val animatedChatBottomPadding by animateDpAsState(
+        targetValue = if (showFloatingToolbar) toolbarContentPadding else navigationBarHeight,
+        animationSpec = tween(durationMillis = 220),
+        label = "toolsBarContentPadding",
+    )
+    androidx.compose.runtime.LaunchedEffect(currentRoute, isOnboardingCompleted) {
+        if (currentRoute == "chat") {
+            isFloatingToolbarVisible = false
+        } else if (isPrimaryRoute) {
+            isFloatingToolbarVisible = true
+        }
+    }
     androidx.compose.runtime.LaunchedEffect(openRemindersRequest, isOnboardingCompleted) {
         if (openRemindersRequest > 0 && isOnboardingCompleted == true) {
             navController.navigate("reminders") { launchSingleTop = true }
@@ -184,7 +208,9 @@ fun MainNavigation(
             ChatScreen(
                 viewModel = chatVm,
                 onNavigateToSetup = { navController.navigate("setup") },
-                bottomOverlayPadding = if (showFloatingToolbar) toolbarContentPadding else 0.dp,
+                isToolsBarVisible = showFloatingToolbar,
+                onToggleToolsBar = { isFloatingToolbarVisible = !showFloatingToolbar },
+                bottomOverlayPadding = animatedChatBottomPadding,
             )
         }
 
@@ -230,7 +256,20 @@ fun MainNavigation(
             )
         }
     }
-    if (showFloatingToolbar) {
+    AnimatedVisibility(
+        visible = showFloatingToolbar,
+        enter = fadeIn(animationSpec = tween(220)) +
+            slideInVertically(
+                animationSpec = tween(220),
+                initialOffsetY = { it },
+            ),
+        exit = fadeOut(animationSpec = tween(160)) +
+            slideOutVertically(
+                animationSpec = tween(160),
+                targetOffsetY = { it },
+            ),
+        modifier = Modifier.align(Alignment.BottomCenter),
+    ) {
         FloatingDestinationToolbar(
             destinations = primaryDestinations,
             currentRoute = currentRoute,
@@ -242,7 +281,6 @@ fun MainNavigation(
                 }
             },
             modifier = Modifier
-                .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
                 .padding(bottom = 8.dp),
         )

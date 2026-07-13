@@ -58,10 +58,10 @@ class ChatViewModel(
 
     fun sendMessage(
         userMessage: String,
-        image: Bitmap? = null,
+        images: List<Bitmap> = emptyList(),
         audioBytes: ByteArray? = null,
     ) {
-        if (userMessage.isBlank() && image == null && audioBytes?.isNotEmpty() != true) return
+        if (userMessage.isBlank() && images.isEmpty() && audioBytes?.isNotEmpty() != true) return
         if (_isGenerating.value) return
 
         viewModelScope.launch {
@@ -71,7 +71,7 @@ class ChatViewModel(
                 return@launch
             }
 
-            if (image != null && !visionReady.value) {
+            if (images.isNotEmpty() && !visionReady.value) {
                 _errorMsg.value = "目前載入的 Gemma 模型不支援圖片辨識"
                 return@launch
             }
@@ -82,9 +82,9 @@ class ChatViewModel(
 
             val hasAudio = audioBytes?.isNotEmpty() == true
             val mediaInstruction = when {
-                image != null && hasAudio ->
+                images.isNotEmpty() && hasAudio ->
                     "請實際查看附上的圖片並聆聽附上的語音。先轉寫語音，再結合圖片內容回答。"
-                image != null ->
+                images.isNotEmpty() ->
                     "請實際查看附上的圖片，描述你看到的內容並回答。"
                 hasAudio ->
                     "請實際聆聽附上的語音，先轉寫語音內容，再根據內容回答。不要假設沒有語音。"
@@ -101,7 +101,7 @@ class ChatViewModel(
             val storedUserContent = buildString {
                 if (userMessage.isNotBlank()) {
                     append(userMessage.trim())
-                } else if (image != null) {
+                } else if (images.isNotEmpty()) {
                     append("圖片")
                 } else if (audioBytes?.isNotEmpty() == true) {
                     append("語音")
@@ -113,6 +113,7 @@ class ChatViewModel(
                 role = "user",
                 content = storedUserContent,
                 audioBytes = audioBytes,
+                imageBytes = ChatImageCodec.encode(images),
             )
             chatDao.insertMessage(userMsgObj)
 
@@ -137,10 +138,10 @@ class ChatViewModel(
                 )
 
                 var currentText = ""
-                val responseFlow = if (image != null || audioBytes?.isNotEmpty() == true) {
+                val responseFlow = if (images.isNotEmpty() || audioBytes?.isNotEmpty() == true) {
                     gemmaHelper.generateReplyWithMediaFlow(
                         prompt = fullPrompt,
-                        image = image,
+                        images = images,
                         audioBytes = audioBytes,
                     )
                 } else {

@@ -9,5 +9,6 @@ data class ChatMessage(
     val role: String, // "user" or "assistant"
     val content: String,
     val audioBytes: ByteArray? = null,
+    val imageBytes: ByteArray? = null,
     val timestamp: Long = System.currentTimeMillis()
 )
