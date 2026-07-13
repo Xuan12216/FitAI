@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.xuan.fitai.data.model.ModelLoadState
+import com.xuan.fitai.ui.components.AppLoadingIndicator
 import com.xuan.fitai.ui.components.ThinkingContent
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -168,7 +169,7 @@ fun ChatScreen(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                                        AppLoadingIndicator(modifier = Modifier.size(16.dp))
                                         Text(
                                             text = "Gemma 正在思考中...",
                                             style = MaterialTheme.typography.bodySmall

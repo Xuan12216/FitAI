@@ -14,9 +14,8 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -103,9 +102,14 @@ fun ModelStatusCard(
             when (downloadState) {
                 is ModelDownloadState.Downloading -> {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        LinearProgressIndicator(
+                        LinearWavyProgressIndicator(
                             progress = { downloadState.progress },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            amplitude = { 0.5f },
+                            wavelength = 48.dp,
+                            waveSpeed = 48.dp
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
@@ -138,7 +142,7 @@ fun ModelStatusCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                    AppLoadingIndicator(modifier = Modifier.size(16.dp))
                     Text(text = "載入模型中...", style = MaterialTheme.typography.bodySmall)
                 }
             } else {

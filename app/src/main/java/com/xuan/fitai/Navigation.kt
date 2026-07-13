@@ -317,6 +317,8 @@ private fun FloatingDestinationToolbar(
             toolbarContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             toolbarContentColor = MaterialTheme.colorScheme.onSurface,
         ),
+        expandedShadowElevation = 6.dp,
+        collapsedShadowElevation = 2.dp,
     ) {
         destinations.forEach { destination ->
             val isSelected = destination.route == currentRoute

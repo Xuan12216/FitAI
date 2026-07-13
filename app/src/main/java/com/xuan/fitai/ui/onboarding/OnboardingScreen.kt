@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.xuan.fitai.ui.components.AppLoadingIndicator
 
 import androidx.compose.ui.text.style.TextAlign
 
@@ -29,7 +30,7 @@ fun OnboardingScreen(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator()
+            AppLoadingIndicator()
         }
         return
     }

@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import com.xuan.fitai.ai.GemmaOutputParser
 import com.xuan.fitai.ui.components.NutritionProgressCard
+import com.xuan.fitai.ui.components.AppLoadingIndicator
 import com.xuan.fitai.ui.components.ThinkingContent
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -202,7 +203,7 @@ fun DashboardScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            AppLoadingIndicator(modifier = Modifier.size(20.dp))
                             Text(
                                 text = "AI 營養建議生成中，請稍候...",
                                 style = MaterialTheme.typography.bodyMedium,
@@ -377,9 +378,8 @@ fun DashboardScreen(
                         )
                     ) {
                         if (isAiAnalyzing) {
-                            CircularProgressIndicator(
+                            AppLoadingIndicator(
                                 modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
                                 color = MaterialTheme.colorScheme.onTertiaryContainer
                             )
                             Spacer(modifier = Modifier.width(8.dp))

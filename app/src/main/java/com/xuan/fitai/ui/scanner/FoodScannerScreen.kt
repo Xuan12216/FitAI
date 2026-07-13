@@ -37,6 +37,7 @@ import com.xuan.fitai.camera.CameraController
 import com.xuan.fitai.camera.CameraScreen
 import com.xuan.fitai.ai.GemmaOutputParser
 import com.xuan.fitai.data.model.ModelLoadState
+import com.xuan.fitai.ui.components.LoadingDialog
 import com.xuan.fitai.ui.components.ThinkingContent
 import com.xuan.fitai.util.PermissionUtil
 import java.util.concurrent.Executors
@@ -57,6 +58,7 @@ fun FoodScannerScreen(
     val gemmaVisionReady by viewModel.gemmaVisionReady.collectAsState()
     val scannerModelReady = classifierLoaded == ModelLoadState.Loaded ||
         gemmaLoaded == ModelLoadState.Loaded
+    val isRecognizingFood = (uiState as? ScannerUiState.EditDetails)?.isRecognizing == true
 
     LaunchedEffect(classifierLoaded, gemmaLoaded, gemmaVisionReady, scannerModelReady) {
         android.util.Log.d(
@@ -626,6 +628,13 @@ fun FoodScannerScreen(
                 }
             }
         }
+    }
+
+    if (isRecognizingFood) {
+        LoadingDialog(
+            title = "辨識食物中",
+            message = "正在分析照片，請稍候..."
+        )
     }
 }
 

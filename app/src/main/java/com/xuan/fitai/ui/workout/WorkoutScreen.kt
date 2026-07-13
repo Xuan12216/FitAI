@@ -27,6 +27,7 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import com.xuan.fitai.data.model.WorkoutPlan
 import com.xuan.fitai.ui.components.ThinkingContent
+import com.xuan.fitai.ui.components.AppLoadingIndicator
 import com.xuan.fitai.util.HealthData
 import java.util.Calendar
 
@@ -127,7 +128,7 @@ fun WorkoutScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    AppLoadingIndicator(color = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         "✨ 本地 Gemma 4 正在為您排程運動計畫...",
@@ -157,7 +158,7 @@ fun WorkoutScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    AppLoadingIndicator(modifier = Modifier.size(16.dp))
                                     Text(
                                         text = "AI 運動計畫排程中，請稍候...",
                                         style = MaterialTheme.typography.bodyMedium,
@@ -738,7 +739,7 @@ private fun AISummaryCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    AppLoadingIndicator(modifier = Modifier.size(20.dp))
                     Text(
                         text = "正在產生運動計畫與摘要，請稍候...",
                         style = MaterialTheme.typography.bodyMedium,

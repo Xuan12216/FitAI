@@ -22,10 +22,9 @@ fun LoadingButton(
         enabled = enabled && !isLoading
     ) {
         if (isLoading) {
-            CircularProgressIndicator(
+            AppLoadingIndicator(
                 modifier = Modifier.size(18.dp),
                 color = MaterialTheme.colorScheme.onPrimary,
-                strokeWidth = 2.dp
             )
             Spacer(modifier = Modifier.width(8.dp))
         }
