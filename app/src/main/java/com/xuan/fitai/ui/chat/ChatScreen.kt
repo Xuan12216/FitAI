@@ -69,12 +69,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -87,6 +87,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -99,6 +102,7 @@ import com.xuan.fitai.data.model.ModelLoadState
 import com.xuan.fitai.ui.components.AppLoadingIndicator
 import com.xuan.fitai.ui.components.ThinkingContent
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -131,6 +135,7 @@ fun ChatScreen(
     var playingAudioId by remember { mutableStateOf<Int?>(null) }
     var mediaError by remember { mutableStateOf<String?>(null) }
     var hasAppliedInitialScroll by remember { mutableStateOf(false) }
+    var shouldFollowMessages by remember { mutableStateOf(true) }
     var showAttachmentMenu by remember { mutableStateOf(false) }
     var cameraPermissionGranted by remember {
         mutableStateOf(hasPermission(context, Manifest.permission.CAMERA))
@@ -207,20 +212,42 @@ fun ChatScreen(
         mediaError = null
     }
 
-    val isChatAtBottom by remember {
-        derivedStateOf { !listState.canScrollForward }
+    val userScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                if (source == NestedScrollSource.UserInput && available.y != 0f) {
+                    shouldFollowMessages = false
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
+    LaunchedEffect(listState) {
+        snapshotFlow { !listState.canScrollForward }
+            .distinctUntilChanged()
+            .collect { isAtBottom ->
+                if (isAtBottom) {
+                    shouldFollowMessages = true
+                }
+            }
     }
 
     LaunchedEffect(messages.size, messages.lastOrNull()?.content) {
         if (messages.isEmpty()) {
             hasAppliedInitialScroll = false
+            shouldFollowMessages = true
             return@LaunchedEffect
         }
 
-        // Follow generation only while the user is already at the bottom. This
-        // lets the user read older messages without being pulled back each token.
-        if (!hasAppliedInitialScroll || isChatAtBottom) {
-            listState.scrollToItem(messages.lastIndex)
+        // Keep the newest message at the bottom while following generation.
+        // A zero offset puts the item at the top, which is the jump seen while
+        // the streaming response grows.
+        if (!hasAppliedInitialScroll || shouldFollowMessages) {
+            listState.scrollToItem(messages.lastIndex, scrollOffset = Int.MAX_VALUE)
             hasAppliedInitialScroll = true
         }
     }
@@ -291,11 +318,15 @@ fun ChatScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
+                        .nestedScroll(userScrollConnection)
                         .padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(vertical = 16.dp)
                 ) {
-                    items(messages) { msg ->
+                    items(
+                        items = messages,
+                        key = { msg -> if (msg.id == 0) "streaming" else msg.id },
+                    ) { msg ->
                         val isUser = msg.role == "user"
                         Row(
                             modifier = Modifier.fillMaxWidth(),
