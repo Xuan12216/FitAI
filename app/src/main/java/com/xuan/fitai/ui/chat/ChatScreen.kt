@@ -38,6 +38,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
@@ -48,7 +49,6 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
@@ -110,10 +110,9 @@ import kotlinx.coroutines.withContext
 @Composable
 fun ChatScreen(
     viewModel: ChatViewModel,
+    onNavigateBack: () -> Unit,
     onNavigateToSetup: () -> Unit,
     bottomOverlayPadding: Dp = 0.dp,
-    isToolsBarVisible: Boolean = false,
-    onToggleToolsBar: () -> Unit = {},
 ) {
     val messages by viewModel.chatMessages.collectAsState()
     val isGenerating by viewModel.isGenerating.collectAsState()
@@ -257,6 +256,14 @@ fun ChatScreen(
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("本地 Gemma AI 助理", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                        )
+                    }
+                },
                 actions = {
                     IconButton(onClick = { viewModel.clearChat() }) {
                         Icon(Icons.Default.Delete, contentDescription = "清除聊天紀錄")
@@ -524,30 +531,7 @@ fun ChatScreen(
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        IconButton(
-                            onClick = onToggleToolsBar,
-                            enabled = !isGenerating,
-                            colors = IconButtonDefaults.iconButtonColors(
-                                contentColor = if (isToolsBarVisible) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                },
-                                containerColor = if (isToolsBarVisible) {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                } else {
-                                    Color.Transparent
-                                },
-                            ),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Tune,
-                                contentDescription = if (isToolsBarVisible) "隱藏功能列" else "顯示功能列",
-                            )
-                        }
-
                         Surface(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(36.dp),

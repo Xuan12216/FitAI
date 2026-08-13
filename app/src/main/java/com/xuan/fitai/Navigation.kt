@@ -1,7 +1,6 @@
 package com.xuan.fitai
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -10,25 +9,27 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -37,6 +38,7 @@ import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -88,28 +90,14 @@ fun MainNavigation(
     val currentRoute = currentBackStackEntry?.destination?.route
     val primaryDestinations = listOf(
         BottomDestination("dashboard", "首頁", Icons.Default.Home),
-        BottomDestination("chat", "AI", Icons.AutoMirrored.Filled.Chat),
         BottomDestination("workout", "運動", Icons.Default.FitnessCenter),
         BottomDestination("reminders", "提醒", Icons.Default.Notifications)
     )
 
     val isPrimaryRoute = primaryDestinations.any { it.route == currentRoute }
-    var isFloatingToolbarVisible by rememberSaveable { mutableStateOf(true) }
-    val showFloatingToolbar = isOnboardingCompleted == true && isPrimaryRoute && isFloatingToolbarVisible
+    val showFloatingToolbar = isOnboardingCompleted == true && isPrimaryRoute
     val navigationBarHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val toolbarContentPadding = FloatingToolbarDefaults.ContainerSize + navigationBarHeight + 8.dp
-    val animatedChatBottomPadding by animateDpAsState(
-        targetValue = if (showFloatingToolbar) toolbarContentPadding else navigationBarHeight,
-        animationSpec = tween(durationMillis = 220),
-        label = "toolsBarContentPadding",
-    )
-    androidx.compose.runtime.LaunchedEffect(currentRoute, isOnboardingCompleted) {
-        if (currentRoute == "chat") {
-            isFloatingToolbarVisible = false
-        } else if (isPrimaryRoute) {
-            isFloatingToolbarVisible = true
-        }
-    }
+    val toolbarContentPadding = 55.dp + navigationBarHeight + 8.dp
     androidx.compose.runtime.LaunchedEffect(openRemindersRequest, isOnboardingCompleted) {
         if (openRemindersRequest > 0 && isOnboardingCompleted == true) {
             navController.navigate("reminders") { launchSingleTop = true }
@@ -200,10 +188,9 @@ fun MainNavigation(
             )
             ChatScreen(
                 viewModel = chatVm,
+                onNavigateBack = { navController.popBackStack() },
                 onNavigateToSetup = { navController.navigate("setup") },
-                isToolsBarVisible = showFloatingToolbar,
-                onToggleToolsBar = { isFloatingToolbarVisible = !showFloatingToolbar },
-                bottomOverlayPadding = animatedChatBottomPadding,
+                bottomOverlayPadding = navigationBarHeight,
             )
         }
 
@@ -263,20 +250,39 @@ fun MainNavigation(
             ),
         modifier = Modifier.align(Alignment.BottomCenter),
     ) {
-        FloatingDestinationToolbar(
-            destinations = primaryDestinations,
-            currentRoute = currentRoute,
-            onNavigate = { route ->
-                navController.navigate(route) {
-                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                    launchSingleTop = true
-                    restoreState = true
-                }
-            },
+        Row(
             modifier = Modifier
                 .navigationBarsPadding()
                 .padding(bottom = 8.dp),
-        )
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FloatingDestinationToolbar(
+                destinations = primaryDestinations,
+                currentRoute = currentRoute,
+                onNavigate = { route ->
+                    navController.navigate(route) {
+                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+            )
+            Surface(
+                onClick = { navController.navigate("chat") { launchSingleTop = true } },
+                modifier = Modifier.size(55.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                contentColor = MaterialTheme.colorScheme.primary,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.SmartToy,
+                        contentDescription = "開啟 AI 助理",
+                    )
+                }
+            }
+        }
     }
     }
     }
@@ -292,20 +298,21 @@ private fun FloatingDestinationToolbar(
 ) {
     HorizontalFloatingToolbar(
         expanded = true,
-        modifier = modifier,
+        modifier = modifier.height(55.dp),
         colors = FloatingToolbarDefaults.standardFloatingToolbarColors(
-            toolbarContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            toolbarContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
             toolbarContentColor = MaterialTheme.colorScheme.onSurface,
         ),
-        expandedShadowElevation = 6.dp,
-        collapsedShadowElevation = 2.dp,
+        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+        expandedShadowElevation = 10.dp,
+        collapsedShadowElevation = 6.dp,
     ) {
         destinations.forEach { destination ->
             val isSelected = destination.route == currentRoute
             if (isSelected) {
                 FilledTonalButton(
                     onClick = { onNavigate(destination.route) },
-                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp),
                     colors = ButtonDefaults.filledTonalButtonColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
                         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -321,7 +328,7 @@ private fun FloatingDestinationToolbar(
                 }
             } else {
                 TextButton(onClick = { onNavigate(destination.route) }) {
-                    Text(destination.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(destination.label, color = MaterialTheme.colorScheme.onSurface)
                 }
             }
         }
