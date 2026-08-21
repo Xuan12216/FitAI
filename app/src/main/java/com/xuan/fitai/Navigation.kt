@@ -11,6 +11,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -34,7 +37,6 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingToolbarDefaults
-import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -60,6 +62,11 @@ import com.xuan.fitai.ui.workout.WorkoutScreen
 import com.xuan.fitai.ui.workout.WorkoutViewModel
 import com.xuan.fitai.ui.reminders.ReminderScreen
 import com.xuan.fitai.ui.reminders.ReminderViewModel
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.compose.foundation.layout.WindowInsets
@@ -77,6 +84,8 @@ fun MainNavigation(
     val context = LocalContext.current
     val app = context.applicationContext as FitAIApplication
     val coroutineScope = rememberCoroutineScope()
+    val hazeState = rememberHazeState()
+    val glassTint = MaterialTheme.colorScheme.surface.copy(alpha = 0.52f)
 
     val isOnboardingCompleted by app.userRepository.isOnboardingCompleted.collectAsState(initial = null)
 
@@ -119,6 +128,7 @@ fun MainNavigation(
         startDestination = startDestination,
         modifier = Modifier
             .fillMaxSize()
+            .hazeSource(hazeState)
             .padding(bottom = 0.dp)
     ) {
         composable("onboarding") {
@@ -260,6 +270,7 @@ fun MainNavigation(
             FloatingDestinationToolbar(
                 destinations = primaryDestinations,
                 currentRoute = currentRoute,
+                hazeState = hazeState,
                 onNavigate = { route ->
                     navController.navigate(route) {
                         popUpTo(navController.graph.findStartDestination().id) { saveState = true }
@@ -270,10 +281,23 @@ fun MainNavigation(
             )
             Surface(
                 onClick = { navController.navigate("chat") { launchSingleTop = true } },
-                modifier = Modifier.size(55.dp),
+                modifier = Modifier
+                    .size(55.dp)
+                    .clip(CircleShape)
+                    .hazeEffect(state = hazeState) {
+                        blurRadius = 5.dp
+                        tints = listOf(
+                            HazeTint(glassTint),
+                        )
+                        noiseFactor = 0f
+                    },
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                color = MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.18f),
                 contentColor = MaterialTheme.colorScheme.primary,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                ),
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
@@ -293,42 +317,59 @@ fun MainNavigation(
 private fun FloatingDestinationToolbar(
     destinations: List<BottomDestination>,
     currentRoute: String?,
+    hazeState: HazeState,
     onNavigate: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    HorizontalFloatingToolbar(
-        expanded = true,
-        modifier = modifier.height(55.dp),
-        colors = FloatingToolbarDefaults.standardFloatingToolbarColors(
-            toolbarContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-            toolbarContentColor = MaterialTheme.colorScheme.onSurface,
+    val toolbarGlassTint = MaterialTheme.colorScheme.surface.copy(alpha = 0.52f)
+
+    Surface(
+        modifier = modifier
+            .height(55.dp)
+            .clip(FloatingToolbarDefaults.ContainerShape)
+            .hazeEffect(state = hazeState) {
+                blurRadius = 5.dp
+                tints = listOf(
+                    HazeTint(toolbarGlassTint),
+                )
+                noiseFactor = 0f
+            },
+        shape = FloatingToolbarDefaults.ContainerShape,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.68f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
         ),
-        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-        expandedShadowElevation = 10.dp,
-        collapsedShadowElevation = 6.dp,
+        shadowElevation = 0.dp,
     ) {
-        destinations.forEach { destination ->
-            val isSelected = destination.route == currentRoute
-            if (isSelected) {
-                FilledTonalButton(
-                    onClick = { onNavigate(destination.route) },
-                    contentPadding = PaddingValues(horizontal = 10.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ),
-                ) {
-                    Icon(
-                        imageVector = destination.icon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(destination.label)
-                }
-            } else {
-                TextButton(onClick = { onNavigate(destination.route) }) {
-                    Text(destination.label, color = MaterialTheme.colorScheme.onSurface)
+        Row(
+            modifier = Modifier.padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            destinations.forEach { destination ->
+                val isSelected = destination.route == currentRoute
+                if (isSelected) {
+                    FilledTonalButton(
+                        onClick = { onNavigate(destination.route) },
+                        contentPadding = PaddingValues(horizontal = 10.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ),
+                    ) {
+                        Icon(
+                            imageVector = destination.icon,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(destination.label)
+                    }
+                } else {
+                    TextButton(onClick = { onNavigate(destination.route) }) {
+                        Text(destination.label, color = MaterialTheme.colorScheme.onSurface)
+                    }
                 }
             }
         }
