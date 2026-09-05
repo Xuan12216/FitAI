@@ -9,6 +9,7 @@ import com.xuan.fitai.data.model.MealReminder
 import com.xuan.fitai.data.model.ReminderSettings
 import com.xuan.fitai.data.model.ContextTokenLimits
 import com.xuan.fitai.data.model.AppearanceSettings
+import com.xuan.fitai.data.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
@@ -21,7 +22,10 @@ class UserPreferenceStore(private val dataStore: DataStore<Preferences>) {
     companion object {
         val KEY_IS_ONBOARDING_COMPLETED = booleanPreferencesKey("is_onboarding_completed")
         private val KEY_WALLPAPER_COLORS = booleanPreferencesKey("wallpaper_colors")
+        private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
         private val KEY_CUSTOM_HUE = intPreferencesKey("custom_theme_hue")
+        private val KEY_CUSTOM_SATURATION = floatPreferencesKey("custom_theme_saturation")
+        private val KEY_CUSTOM_HEX = stringPreferencesKey("custom_primary_hex")
         val KEY_USER_GOAL = stringPreferencesKey("user_goal")
         val KEY_GENDER = stringPreferencesKey("gender")
         val KEY_AGE = intPreferencesKey("age")
@@ -73,22 +77,74 @@ class UserPreferenceStore(private val dataStore: DataStore<Preferences>) {
     }
 
     val appearanceFlow: Flow<AppearanceSettings> = dataStore.data.map { preferences ->
+        val themeModeStr = preferences[KEY_THEME_MODE]
+        val themeMode = runCatching { ThemeMode.valueOf(themeModeStr ?: "") }.getOrDefault(ThemeMode.SYSTEM)
         AppearanceSettings(
             useWallpaperColors = preferences[KEY_WALLPAPER_COLORS] ?: false,
+            themeMode = themeMode,
             customHue = preferences[KEY_CUSTOM_HUE]?.coerceIn(0, 359),
+            customSaturation = preferences[KEY_CUSTOM_SATURATION]?.coerceIn(0.1f, 1.0f),
+            customHex = preferences[KEY_CUSTOM_HEX],
         )
     }
 
     suspend fun saveAppearance(settings: AppearanceSettings) {
         dataStore.edit { preferences ->
             preferences[KEY_WALLPAPER_COLORS] = settings.useWallpaperColors
+            preferences[KEY_THEME_MODE] = settings.themeMode.name
             if (settings.customHue == null) preferences.remove(KEY_CUSTOM_HUE)
             else preferences[KEY_CUSTOM_HUE] = settings.customHue.coerceIn(0, 359)
+            if (settings.customSaturation == null) preferences.remove(KEY_CUSTOM_SATURATION)
+            else preferences[KEY_CUSTOM_SATURATION] = settings.customSaturation.coerceIn(0.1f, 1.0f)
+            if (settings.customHex.isNullOrBlank()) preferences.remove(KEY_CUSTOM_HEX)
+            else preferences[KEY_CUSTOM_HEX] = settings.customHex.trim()
         }
     }
 
     val isOnboardingCompletedFlow: Flow<Boolean> = dataStore.data.map { preferences ->
-        preferences[KEY_IS_ONBOARDING_COMPLETED] ?: false
+        val explicitlyCompleted = preferences[KEY_IS_ONBOARDING_COMPLETED] == true
+        val hasAnyProfileKey = preferences.contains(KEY_USER_GOAL) ||
+                preferences.contains(KEY_HEIGHT) ||
+                preferences.contains(KEY_WEIGHT) ||
+                preferences.contains(KEY_AGE) ||
+                preferences.contains(KEY_GENDER) ||
+                preferences.contains(KEY_ACTIVITY_LEVEL) ||
+                preferences.contains(KEY_DIET_PREFERENCE) ||
+                preferences.contains(KEY_WORKOUT_EXPERIENCE)
+        val isNotInitialData = (preferences[KEY_USER_GOAL] != null && preferences[KEY_USER_GOAL] != "維持健康") ||
+                (preferences[KEY_GENDER] != null && preferences[KEY_GENDER] != "男") ||
+                (preferences[KEY_AGE] != null && preferences[KEY_AGE] != 25) ||
+                (preferences[KEY_HEIGHT] != null && preferences[KEY_HEIGHT] != 170f) ||
+                (preferences[KEY_WEIGHT] != null && preferences[KEY_WEIGHT] != 60f) ||
+                (preferences[KEY_ACTIVITY_LEVEL] != null && preferences[KEY_ACTIVITY_LEVEL] != "中度") ||
+                (preferences[KEY_DIET_PREFERENCE] != null && preferences[KEY_DIET_PREFERENCE] != "無特殊偏好") ||
+                (preferences[KEY_WORKOUT_EXPERIENCE] != null && preferences[KEY_WORKOUT_EXPERIENCE] != "無經驗")
+        explicitlyCompleted || hasAnyProfileKey || isNotInitialData
+    }
+
+    suspend fun repairOnboardingIfDataExists() {
+        dataStore.edit { preferences ->
+            val explicitlyCompleted = preferences[KEY_IS_ONBOARDING_COMPLETED] == true
+            val hasAnyProfileKey = preferences.contains(KEY_USER_GOAL) ||
+                    preferences.contains(KEY_HEIGHT) ||
+                    preferences.contains(KEY_WEIGHT) ||
+                    preferences.contains(KEY_AGE) ||
+                    preferences.contains(KEY_GENDER) ||
+                    preferences.contains(KEY_ACTIVITY_LEVEL) ||
+                    preferences.contains(KEY_DIET_PREFERENCE) ||
+                    preferences.contains(KEY_WORKOUT_EXPERIENCE)
+            val isNotInitialData = (preferences[KEY_USER_GOAL] != null && preferences[KEY_USER_GOAL] != "維持健康") ||
+                    (preferences[KEY_GENDER] != null && preferences[KEY_GENDER] != "男") ||
+                    (preferences[KEY_AGE] != null && preferences[KEY_AGE] != 25) ||
+                    (preferences[KEY_HEIGHT] != null && preferences[KEY_HEIGHT] != 170f) ||
+                    (preferences[KEY_WEIGHT] != null && preferences[KEY_WEIGHT] != 60f) ||
+                    (preferences[KEY_ACTIVITY_LEVEL] != null && preferences[KEY_ACTIVITY_LEVEL] != "中度") ||
+                    (preferences[KEY_DIET_PREFERENCE] != null && preferences[KEY_DIET_PREFERENCE] != "無特殊偏好") ||
+                    (preferences[KEY_WORKOUT_EXPERIENCE] != null && preferences[KEY_WORKOUT_EXPERIENCE] != "無經驗")
+            if (!explicitlyCompleted && (hasAnyProfileKey || isNotInitialData)) {
+                preferences[KEY_IS_ONBOARDING_COMPLETED] = true
+            }
+        }
     }
 
     val selectedLlmPathFlow: Flow<String?> = dataStore.data.map { preferences ->
@@ -121,7 +177,7 @@ class UserPreferenceStore(private val dataStore: DataStore<Preferences>) {
         preferences[KEY_TEMPERATURE] ?: 1.0f
     }
     val useGpuFlow: Flow<Boolean> = dataStore.data.map { preferences ->
-        preferences[KEY_USE_GPU] ?: false
+        preferences[KEY_USE_GPU] ?: true
     }
     val enableThinkingFlow: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[KEY_ENABLE_THINKING] ?: false

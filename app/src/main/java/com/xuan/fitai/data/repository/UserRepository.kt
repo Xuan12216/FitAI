@@ -15,4 +15,8 @@ class UserRepository(private val userPreferenceStore: UserPreferenceStore) {
     suspend fun resetOnboarding() {
         userPreferenceStore.resetOnboarding()
     }
+
+    suspend fun repairOnboardingIfDataExists() {
+        userPreferenceStore.repairOnboardingIfDataExists()
+    }
 }

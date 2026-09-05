@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.runBlocking
@@ -58,6 +59,7 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
     private val inferenceIdGenerator = AtomicLong(0L)
 
     private val userPreferenceStore = UserPreferenceStore(context)
+    override val contextTokenLimit = userPreferenceStore.maxTokensFlow
 
     private data class InferenceRequest(
         val id: Long,
@@ -129,27 +131,28 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} waiting for modelMutex")
             modelMutex.lock()
             locked = true
+            activateInference(inference)
             android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} mutex acquired")
             val currentConversation = createConversationForInference(inference)
                 ?: return@withContext "錯誤：Gemma 模型尚未載入。"
             try {
                 val response = StringBuilder()
-                currentConversation.sendMessageAsync(prompt).collect { token ->
+                currentConversation.sendMessageAsync(prompt).map { it.toString() }.requireAiResponse().collect { token ->
                     response.append(token)
                 }
                 android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} completed responseChars=${response.length}")
                 response.toString()
             } catch (e: CancellationException) {
                 android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} cancelled inside generateReply: ${e.message}")
-                resetConversationAfterCancelledInference(inference)
+                if (locked) cancelConversation(inference)
                 throw e
             } catch (e: Exception) {
                 android.util.Log.e("FitAI_GemmaReq", "GemmaInference#${inference.id} failed inside generateReply", e)
-                resetReusableConversationIfRecoverableSessionError(inference, e)
-                "本地 Gemma 推論出錯: ${e.localizedMessage}"
+                    throw e
             }
         } finally {
             if (locked) {
+                closeInferenceConversation(inference)
                 modelMutex.unlock()
                 android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} mutex released")
             }
@@ -167,11 +170,12 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} waiting for modelMutex")
             modelMutex.lock()
             locked = true
+            activateInference(inference)
             android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} mutex acquired")
             val currentConversation = createConversationForInference(inference)
                 ?: throw IllegalStateException("錯誤：Gemma 模型尚未載入。")
-            currentConversation.sendMessageAsync(prompt).collect { token ->
-                val tokenText = token.toString()
+            currentConversation.sendMessageAsync(prompt).map { it.toString() }.requireAiResponse().collect { token ->
+                val tokenText = token
                 tokenCount += 1
                 charCount += tokenText.length
                 emit(tokenText)
@@ -179,14 +183,14 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} completed tokens=$tokenCount chars=$charCount")
         } catch (e: CancellationException) {
             android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} cancelled inside generateReplyFlow after tokens=$tokenCount chars=$charCount: ${e.message}")
-            resetConversationAfterCancelledInference(inference)
+            if (locked) cancelConversation(inference)
             throw e
         } catch (e: Exception) {
             android.util.Log.e("FitAI_GemmaReq", "GemmaInference#${inference.id} failed inside generateReplyFlow after tokens=$tokenCount chars=$charCount", e)
-            resetReusableConversationIfRecoverableSessionError(inference, e)
             throw e
         } finally {
             if (locked) {
+                closeInferenceConversation(inference)
                 modelMutex.unlock()
                 android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} mutex released")
             }
@@ -215,6 +219,7 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
         try {
             modelMutex.lock()
             locked = true
+            activateInference(inference)
             val currentConversation = createConversationForInference(inference)
                 ?: throw IllegalStateException("錯誤：Gemma 模型尚未載入。")
             val responseFlow = if (images.isEmpty() && audioBytes?.isNotEmpty() != true) {
@@ -222,23 +227,25 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             } else {
                 currentConversation.sendMessageAsync(createMediaContents(prompt, images, audioBytes))
             }
-            responseFlow.collect { token ->
+            responseFlow.map { it.toString() }.requireAiResponse().collect { token ->
                 tokenCount += 1
-                emit(token.toString())
+                emit(token)
             }
             android.util.Log.d(
                 "FitAI_GemmaReq",
                 "GemmaInference#${inference.id} completed media=$mediaLabel tokens=$tokenCount"
             )
         } catch (e: CancellationException) {
-            resetConversationAfterCancelledInference(inference)
+            if (locked) cancelConversation(inference)
             throw e
         } catch (e: Exception) {
             android.util.Log.e("FitAI_GemmaReq", "Gemma media inference failed", e)
-            resetReusableConversationIfRecoverableSessionError(inference, e)
             throw e
         } finally {
-            if (locked) modelMutex.unlock()
+            if (locked) {
+                closeInferenceConversation(inference)
+                modelMutex.unlock()
+            }
             finishInference(inference)
         }
     }.flowOn(Dispatchers.IO)
@@ -290,71 +297,16 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
     }
 
     override suspend fun analyzeFood(foodName: String, portion: String, goal: String): GemmaFoodAnalysis {
-        val prompt = """
-            You are a professional nutritionist. The user's goal is: $goal. The user just scanned: $foodName (portion: $portion).
-            Estimate its calorie count (kcal) and macronutrients (protein, carbs, fat in grams) using common Taiwan restaurant/brand nutrition references when recognizable.
-            First infer the exact food items, quantity, and serving size from the name. For composite meals, estimate each item separately and sum them.
-            Keep calories consistent with macros: calories should be close to protein*4 + carbs*4 + fat*9.
-            Do not confuse a single item with a combo meal. Do not invent extremely high calories unless the portion clearly indicates multiple servings.
-            Before finalizing, self-check: if calories differ from protein*4 + carbs*4 + fat*9 by more than 20%, revise the macros or calories so they are consistent.
-            If unsure about portion size, state the assumed portion briefly in reasoning and use a conservative common serving estimate.
-            Provide your response in JSON format matching this structure:
-            {"calories": 150.0, "protein": 10.0, "carbs": 12.0, "fat": 3.0, "suitable": true, "advice": "Concise advice in Traditional Chinese.", "reasoning": "Short estimate basis in Traditional Chinese."}
-            Output ONLY one raw JSON object. Do not use markdown fences. Keep advice and reasoning each under 40 Traditional Chinese characters.
-        """.trimIndent()
-
-        val reply = generateReply(prompt)
-        android.util.Log.d("FitAI_Diag", "analyzeFood raw reply (${reply.length} chars): ${reply.take(500)}")
-        val thinkingText = GemmaOutputParser.extractThinking(reply)
-        android.util.Log.d("FitAI_Diag", "analyzeFood thinking: ${thinkingText?.take(200)}")
-        return try {
-            val cleanReply = GemmaOutputParser.extractJson(reply)
-            android.util.Log.d("FitAI_Diag", "analyzeFood cleanReply: $cleanReply")
-            val json = org.json.JSONObject(cleanReply)
-            GemmaFoodAnalysis(
-                calories = json.optDouble("calories", 150.0).toFloat(),
-                protein = json.optDouble("protein", 10.0).toFloat(),
-                carbs = json.optDouble("carbs", 12.0).toFloat(),
-                fat = json.optDouble("fat", 3.0).toFloat(),
-                isSuitable = json.optBoolean("suitable", true),
-                advice = json.optString("advice", "這是本地 AI 估算的營養價值。請視實際烹調方式調整。"),
-                reasoning = json.optString("reasoning", "無本地 AI 估算依據。"),
-                thinking = thinkingText
-            )
-        } catch (e: Exception) {
-            android.util.Log.e("FitAI_Diag", "analyzeFood JSON parse failed", e)
-            val partialAnalysis = GemmaOutputParser.extractPartialFoodAnalysis(reply, thinkingText)
-            if (partialAnalysis != null) {
-                android.util.Log.w("FitAI_Diag", "analyzeFood used partial JSON recovery")
-                return partialAnalysis
-            }
-            GemmaFoodAnalysis(
-                calories = 200f,
-                protein = 8f,
-                carbs = 20f,
-                fat = 6f,
-                isSuitable = true,
-                advice = "本地 Gemma 推論成功。請注意食物份量並搭配均衡飲食。",
-                reasoning = "推論過程因 JSON 解析失敗而未顯示。",
-                thinking = thinkingText
-            )
-        }
+        val maxTokens = userPreferenceStore.maxTokensFlow.first()
+        return GemmaOutputParser.parseFoodAnalysis(
+            generateReply(PromptBuilder.buildFoodAnalysisPrompt(foodName, portion, goal, maxTokens))
+        )
     }
 
-    override fun analyzeFoodFlow(foodName: String, portion: String, goal: String): kotlinx.coroutines.flow.Flow<String> {
-        val prompt = """
-            You are a professional nutritionist. The user's goal is: $goal. The user just scanned: $foodName (portion: $portion).
-            Estimate its calorie count (kcal) and macronutrients (protein, carbs, fat in grams) using common Taiwan restaurant/brand nutrition references when recognizable.
-            First infer the exact food items, quantity, and serving size from the name. For composite meals, estimate each item separately and sum them.
-            Keep calories consistent with macros: calories should be close to protein*4 + carbs*4 + fat*9.
-            Do not confuse a single item with a combo meal. Do not invent extremely high calories unless the portion clearly indicates multiple servings.
-            Before finalizing, self-check: if calories differ from protein*4 + carbs*4 + fat*9 by more than 20%, revise the macros or calories so they are consistent.
-            If unsure about portion size, state the assumed portion briefly in reasoning and use a conservative common serving estimate.
-            Provide your response in JSON format matching this structure:
-            {"calories": 150.0, "protein": 10.0, "carbs": 12.0, "fat": 3.0, "suitable": true, "advice": "Concise advice in Traditional Chinese.", "reasoning": "Short estimate basis in Traditional Chinese."}
-            Output ONLY one raw JSON object. Do not use markdown fences. Keep advice and reasoning each under 40 Traditional Chinese characters.
-        """.trimIndent()
-        return generateReplyFlow(prompt)
+    override fun analyzeFoodFlow(foodName: String, portion: String, goal: String): kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.flow {
+        val maxTokens = userPreferenceStore.maxTokensFlow.first()
+        val prompt = PromptBuilder.buildFoodAnalysisPrompt(foodName, portion, goal, maxTokens)
+        generateReplyFlow(prompt).collect { emit(it) }
     }
 
     override suspend fun identifyFoodFromImage(bitmap: Bitmap): String = withContext(Dispatchers.IO) {
@@ -364,6 +316,7 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} waiting for modelMutex")
             modelMutex.lock()
             locked = true
+            activateInference(inference)
             android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} mutex acquired")
             val currentConversation = createConversationForInference(inference) ?: return@withContext "未知食物"
             val imageBytes = bitmapToPngBytes(bitmap)
@@ -377,7 +330,7 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             val contents = Contents.of(listOf<Content>(imageContent, textContent))
 
             val response = StringBuilder()
-            currentConversation.sendMessageAsync(contents).collect { msg ->
+            currentConversation.sendMessageAsync(contents).map { it.toString() }.requireAiResponse().collect { msg ->
                 response.append(msg)
             }
             val result = response.toString().trim()
@@ -385,14 +338,14 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             if (result.isBlank()) "未知食物" else result
         } catch (e: CancellationException) {
             android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} cancelled inside identifyFoodFromImage: ${e.message}")
-            resetConversationAfterCancelledInference(inference)
+            if (locked) cancelConversation(inference)
             throw e
         } catch (e: Exception) {
             android.util.Log.e("FitAI_GemmaReq", "GemmaInference#${inference.id} identifyFoodFromImage failed", e)
-            resetReusableConversationIfRecoverableSessionError(inference, e)
             "未知食物"
         } finally {
             if (locked) {
+                closeInferenceConversation(inference)
                 modelMutex.unlock()
                 android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} mutex released")
             }
@@ -407,6 +360,7 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} waiting for modelMutex")
             modelMutex.lock()
             locked = true
+            activateInference(inference)
             android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} mutex acquired")
             val currentConversation = createConversationForInference(inference)
                 ?: throw IllegalStateException("Gemma model is not loaded")
@@ -422,21 +376,21 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             val contents = Contents.of(listOf<Content>(imageContent, textContent))
 
             var tokenCount = 0
-            currentConversation.sendMessageAsync(contents).collect { token ->
+            currentConversation.sendMessageAsync(contents).map { it.toString() }.requireAiResponse().collect { token ->
                 tokenCount += 1
-                emit(token.toString())
+                emit(token)
             }
             android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} completed visionFlow tokens=$tokenCount")
         } catch (e: CancellationException) {
             android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} cancelled inside identifyFoodFromImageFlow: ${e.message}")
-            resetConversationAfterCancelledInference(inference)
+            if (locked) cancelConversation(inference)
             throw e
         } catch (e: Exception) {
             android.util.Log.e("FitAI_GemmaReq", "GemmaInference#${inference.id} identifyFoodFromImageFlow failed", e)
-            resetReusableConversationIfRecoverableSessionError(inference, e)
             throw e
         } finally {
             if (locked) {
+                closeInferenceConversation(inference)
                 modelMutex.unlock()
                 android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} mutex released")
             }
@@ -449,31 +403,19 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             ?: throw IllegalStateException("Gemma inference must run in a coroutine")
         val id = inferenceIdGenerator.incrementAndGet()
         val startedAt = System.currentTimeMillis()
-        val preview = promptOrDetail.toLogPreview()
-        synchronized(inferenceLock) {
-            val previousJob = activeInferenceJob
-            val previousId = activeInferenceId
-            val previousType = activeInferenceType
-            val previousWasActive = previousJob?.isActive == true
-            activeInferenceJob
-                ?.takeIf { it != currentJob && it.isActive }
-                ?.also {
-                    android.util.Log.d(
-                        "FitAI_GemmaReq",
-                        "GemmaInference#$id cancelling previous #$previousId type=$previousType before starting type=$type"
-                    )
-                    it.cancel(CancellationException("Superseded by GemmaInference#$id type=$type"))
-                }
-            activeInferenceJob = currentJob
-            activeInferenceId = id
-            activeInferenceType = type
-            activeInferenceStartedAt = startedAt
-            android.util.Log.d(
-                "FitAI_GemmaReq",
-                "GemmaInference#$id start type=$type previousActiveBeforeCancel=$previousWasActive loadState=${_loadState.value} model=${_loadedModelName.value} preview=$preview"
-            )
-        }
+        android.util.Log.d("FitAI_GemmaReq", "GemmaInference#$id queued type=$type prompt=${promptOrDetail.toLogPreview()}")
         return InferenceRequest(id = id, type = type, job = currentJob, startedAt = startedAt)
+    }
+
+    // Register only after acquiring the mutex. Waiting requests never cancel the
+    // owner, and model reloads can cancel the actual running request.
+    private fun activateInference(inference: InferenceRequest) {
+        synchronized(inferenceLock) {
+            activeInferenceJob = inference.job
+            activeInferenceId = inference.id
+            activeInferenceType = inference.type
+            activeInferenceStartedAt = inference.startedAt
+        }
     }
 
     private fun finishInference(inference: InferenceRequest) {
@@ -528,58 +470,25 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
         }
     }
 
-    private fun resetConversationAfterCancelledInference(inference: InferenceRequest) {
-        android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} cancelled; keeping reusable conversation open")
-    }
-
-    private fun resetReusableConversationIfRecoverableSessionError(inference: InferenceRequest, throwable: Throwable) {
-        val messages = mutableListOf<String>()
-        var current: Throwable? = throwable
-        while (current != null) {
-            current.message?.let { messages += it }
-            current = current.cause
-        }
-        val message = messages.joinToString(separator = " | ")
-        if (!message.contains("Session is not prefilled yet", ignoreCase = true)) {
-            return
-        }
-
-        android.util.Log.w(
-            "FitAI_GemmaReq",
-            "GemmaInference#${inference.id} resetting reusable conversation after recoverable session error: $message"
-        )
-        val currentConv = inferenceConversation
-        inferenceConversation = null
+    private fun cancelConversation(inference: InferenceRequest) {
         try {
-            currentConv?.close()
+            inferenceConversation?.cancelProcess()
+            android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} native generation cancelled")
         } catch (e: Exception) {
-            android.util.Log.w("FitAI_GemmaReq", "GemmaInference#${inference.id} failed closing broken conversation", e)
+            android.util.Log.w("FitAI_GemmaReq", "Failed to cancel native generation", e)
         }
     }
 
     private var inferenceConversation: Conversation? = null
 
     private fun createConversationForInference(inference: InferenceRequest): Conversation? {
-        inferenceConversation?.let {
-            android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} reusing conversation")
-            return it
-        }
-
-        val currentEngine = engine
-        val currentConfig = conversationConfig
-        if (currentEngine == null || currentConfig == null) {
-            android.util.Log.w("FitAI_GemmaReq", "GemmaInference#${inference.id} cannot create one-shot conversation: engine/config unavailable")
-            return null
-        }
-
-        return try {
-            currentEngine.createConversation(currentConfig).also {
-                inferenceConversation = it
-                android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} created reusable conversation")
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("FitAI_GemmaReq", "GemmaInference#${inference.id} failed creating one-shot conversation", e)
-            null
+        if (_loadState.value != ModelLoadState.Loaded) return null
+        val currentEngine = engine ?: return null
+        val currentConfig = conversationConfig ?: return null
+        closeInferenceConversation(inference)
+        return currentEngine.createConversation(currentConfig).also {
+            inferenceConversation = it
+            android.util.Log.d("FitAI_GemmaReq", "GemmaInference#${inference.id} created fresh conversation")
         }
     }
 

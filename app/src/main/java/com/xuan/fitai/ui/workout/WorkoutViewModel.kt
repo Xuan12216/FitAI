@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.xuan.fitai.ai.GemmaLocalHelper
 import com.xuan.fitai.ai.GemmaOutputParser
+import com.xuan.fitai.ai.PromptBuilder
 import com.xuan.fitai.data.model.UserProfile
 import com.xuan.fitai.data.model.WorkoutPlan
 import com.xuan.fitai.data.repository.UserRepository
@@ -186,37 +187,17 @@ class WorkoutViewModel(
             _isSummarizing.value = true
             _generationThinking.value = null
             _workoutSummary.value = ""
+            var currentText = ""
             try {
                 val profile = userProfile.value
-                val prompt = """
-                    You are a professional fitness coach. The user's profile is:
-                    - Goal: ${profile.goal}
-                    - Age: ${profile.age}, Gender: ${profile.gender}
-                    - Height: ${profile.height}cm, Weight: ${profile.weight}kg
-                    - Experience level: ${profile.workoutExperience}
-                    - Weekly training days: $daysPerWeek days
-                    - Preferences: $preference
+                val maxTokens = gemmaHelper.contextTokenLimit.first()
+                val prompt = PromptBuilder.buildWorkoutPlanPrompt(
+                    profile = profile,
+                    daysPerWeek = daysPerWeek,
+                    preference = preference,
+                    maxTokens = maxTokens,
+                )
 
-                    Generate a customized weekly workout plan for them.
-                    Output ONLY one raw JSON object. Do not include markdown, code fences, or extra prose.
-                    The JSON object must match this schema exactly:
-                    {
-                      "summary": "3-5 short Traditional Chinese sentences. Mention weekly frequency, main training focus, and a motivational closing.",
-                      "weeklyPlan": [
-                        {
-                          "dayOfWeek": "Traditional Chinese weekday name, for example 星期一",
-                          "exerciseName": "Traditional Chinese exercise name with optional English in parentheses",
-                          "sets": 4,
-                          "reps": "8-12次",
-                          "targetMuscleGroup": "Traditional Chinese target muscle group"
-                        }
-                      ]
-                    }
-                    Only include the days they should train based on the selected $daysPerWeek days.
-                    Make weeklyPlan practical and balanced for the user's goal and experience level.
-                """.trimIndent()
-
-                var currentText = ""
                 gemmaHelper.generateReplyFlow(prompt).collect { token ->
                     currentText += token
                     val thinking = GemmaOutputParser.extractThinking(currentText)
@@ -238,34 +219,64 @@ class WorkoutViewModel(
 
                 val jsonObjectStr = GemmaOutputParser.extractJson(currentText)
                 val jsonArrayStr = GemmaOutputParser.extractJsonArray(currentText)
-                val rootObject = if (jsonObjectStr.isNotBlank()) JSONObject(jsonObjectStr) else null
-                val summary = rootObject?.optString("summary")?.trim().orEmpty()
-                val jsonArray = rootObject?.optJSONArray("weeklyPlan")
-                    ?: if (jsonArrayStr.isNotBlank()) JSONArray(jsonArrayStr) else null
-                if (jsonArray != null) {
-                    if (jsonArray.length() > 0) {
-                        workoutRepository.clearAllWorkoutPlans()
-                        for (i in 0 until jsonArray.length()) {
-                            val obj = jsonArray.getJSONObject(i)
-                            workoutRepository.insertWorkoutPlan(
-                                WorkoutPlan(
-                                    dayOfWeek = obj.optString("dayOfWeek", "星期一"),
-                                    exerciseName = obj.optString("exerciseName", "未知運動"),
-                                    sets = obj.optInt("sets", 3),
-                                    reps = obj.optString("reps", "10下"),
-                                    targetMuscleGroup = obj.optString("targetMuscleGroup", "全身")
-                                )
-                            )
-                        }
-                        val summaryWithThinking = GemmaOutputParser.withThinkingContent(
-                            thinkingText = thinking,
-                            contentText = summary
-                        )
-                        _workoutSummary.value = summaryWithThinking
-                        userPreferenceStore.saveWorkoutSummary(summaryWithThinking)
+                val rootObject = try {
+                    if (jsonObjectStr.isNotBlank()) JSONObject(jsonObjectStr) else null
+                } catch (_: Exception) {
+                    try {
+                        val repaired = GemmaOutputParser.repairJson(jsonObjectStr)
+                        if (repaired.isNotBlank()) JSONObject(repaired) else null
+                    } catch (_: Exception) {
+                        null
                     }
+                }
+                val summary = rootObject?.optString("summary")?.trim().orEmpty().ifBlank {
+                    GemmaOutputParser.extractJsonStringValue(currentText, "summary")?.trim().orEmpty()
+                }
+                val jsonArray = rootObject?.optJSONArray("weeklyPlan")
+                    ?: try {
+                        if (jsonArrayStr.isNotBlank()) JSONArray(jsonArrayStr) else null
+                    } catch (_: Exception) {
+                        try {
+                            val repairedArray = GemmaOutputParser.repairJson(jsonArrayStr)
+                            if (repairedArray.isNotBlank()) JSONArray(repairedArray) else null
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }
+
+                val plansToInsert = mutableListOf<WorkoutPlan>()
+                if (jsonArray != null && jsonArray.length() > 0) {
+                    for (i in 0 until jsonArray.length()) {
+                        val obj = jsonArray.optJSONObject(i) ?: continue
+                        plansToInsert.add(
+                            WorkoutPlan(
+                                dayOfWeek = obj.optString("dayOfWeek", "星期一"),
+                                exerciseName = obj.optString("exerciseName", "未知運動"),
+                                sets = obj.optInt("sets", 3),
+                                reps = obj.optString("reps", "10下"),
+                                targetMuscleGroup = obj.optString("targetMuscleGroup", "全身")
+                            )
+                        )
+                    }
+                }
+
+                if (plansToInsert.isEmpty()) {
+                    plansToInsert.addAll(GemmaOutputParser.extractWorkoutPlansFromText(currentText))
+                }
+
+                if (plansToInsert.isNotEmpty()) {
+                    workoutRepository.clearAllWorkoutPlans()
+                    for (plan in plansToInsert) {
+                        workoutRepository.insertWorkoutPlan(plan)
+                    }
+                    val effectiveSummary = summary.ifBlank { "已為您客製化規劃每週 ${daysPerWeek} 天訓練計畫。" }
+                    val summaryWithThinking = GemmaOutputParser.withThinkingContent(
+                        thinkingText = thinking,
+                        contentText = effectiveSummary
+                    )
+                    _workoutSummary.value = summaryWithThinking
+                    userPreferenceStore.saveWorkoutSummary(summaryWithThinking)
                 } else {
-                    // Fallback to default if JSON extraction fails
                     userPreferenceStore.saveWorkoutPlanThinking("")
                     userPreferenceStore.saveWorkoutSummary("")
                     _workoutSummary.value = null
@@ -274,10 +285,22 @@ class WorkoutViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                android.util.Log.e("FitAI_Workout", "AI generation failed", e)
-                userPreferenceStore.saveWorkoutPlanThinking("")
-                userPreferenceStore.saveWorkoutSummary("")
-                generateDefaultWorkoutPlan()
+                android.util.Log.e("FitAI_Workout", "AI generation exception, checking salvageable exercises", e)
+                val fallbackPlans = GemmaOutputParser.extractWorkoutPlansFromText(currentText)
+                if (fallbackPlans.isNotEmpty()) {
+                    workoutRepository.clearAllWorkoutPlans()
+                    for (plan in fallbackPlans) {
+                        workoutRepository.insertWorkoutPlan(plan)
+                    }
+                    val partialSummary = GemmaOutputParser.extractJsonStringValue(currentText, "summary")
+                        ?: "已為您安排訓練項目。"
+                    _workoutSummary.value = partialSummary
+                    userPreferenceStore.saveWorkoutSummary(partialSummary)
+                } else {
+                    userPreferenceStore.saveWorkoutPlanThinking("")
+                    userPreferenceStore.saveWorkoutSummary("")
+                    generateDefaultWorkoutPlan()
+                }
             } finally {
                 _isGenerating.value = false
                 _isSummarizing.value = false
@@ -291,22 +314,12 @@ class WorkoutViewModel(
             _workoutSummary.value = ""
             try {
                 val profile = userProfile.value
-                val summaryPrompt = """
-                    Based on the following workout plan JSON, write a concise and motivating summary in Traditional Chinese (繁體中文) for the user.
-                    The summary should:
-                    - Be 3-5 sentences
-                    - Highlight the key training focus and muscle groups targeted
-                    - Mention the training frequency and volume
-                    - Include a motivational closing statement
-                    - Use a friendly, encouraging tone
-                    - Do NOT include any JSON or code, only plain prose text
-
-                    User Goal: ${profile.goal}
-                    Workout Plan JSON:
-                    $planJson
-
-                    Write the summary now:
-                """.trimIndent()
+                val maxTokens = gemmaHelper.contextTokenLimit.first()
+                val summaryPrompt = PromptBuilder.buildWorkoutSummaryPrompt(
+                    goal = profile.goal,
+                    planJson = planJson,
+                    maxTokens = maxTokens,
+                )
 
                 var rawText = ""
                 gemmaHelper.generateReplyFlow(summaryPrompt).collect { token ->

@@ -18,9 +18,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.isSystemInDarkTheme
 import com.xuan.fitai.theme.FitAITheme
 import com.xuan.fitai.ui.components.LoadingDialog
 import com.xuan.fitai.data.model.AppearanceSettings
+import com.xuan.fitai.data.model.ThemeMode
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 class MainActivity : ComponentActivity() {
@@ -31,6 +33,7 @@ class MainActivity : ComponentActivity() {
 
         val app = application as FitAIApplication
         handleNotificationIntent(intent)
+        handleClipboardIntent(intent)
 
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
@@ -42,7 +45,18 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             val appearance by app.userPreferenceStore.appearanceFlow.collectAsStateWithLifecycle(initialValue = AppearanceSettings())
-            FitAITheme(dynamicColor = appearance.useWallpaperColors, customHue = appearance.customHue) {
+            val systemDark = isSystemInDarkTheme()
+            val isDark = when (appearance.themeMode) {
+                ThemeMode.SYSTEM -> systemDark
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
+            FitAITheme(
+                darkTheme = isDark,
+                dynamicColor = appearance.useWallpaperColors,
+                customHue = appearance.customHue,
+                customSaturation = appearance.customSaturation
+            ) {
                 var startupInitializing by remember { mutableStateOf(true) }
 
                 LaunchedEffect(Unit) {
@@ -74,12 +88,22 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleNotificationIntent(intent)
+        handleClipboardIntent(intent)
     }
 
     private fun handleNotificationIntent(intent: android.content.Intent?) {
         if (intent?.getBooleanExtra(EXTRA_OPEN_REMINDERS, false) == true) {
             openRemindersRequest++
             intent.removeExtra(EXTRA_OPEN_REMINDERS)
+        }
+    }
+
+    private fun handleClipboardIntent(intent: android.content.Intent?) {
+        val text = intent?.getStringExtra("copy_to_clipboard")
+        if (!text.isNullOrBlank()) {
+            val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("debug_input", text))
+            intent.removeExtra("copy_to_clipboard")
         }
     }
 

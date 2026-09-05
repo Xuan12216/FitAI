@@ -109,9 +109,22 @@ fun MainNavigation(
     val showFloatingToolbar = isOnboardingCompleted == true && isPrimaryRoute
     val navigationBarHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val toolbarContentPadding = 55.dp + navigationBarHeight + 8.dp
+
+    val navigateToTopLevel: (String) -> Unit = { route ->
+        val startDestinationId = navController.graph.findStartDestination().id
+        val isStartDestination = route == "dashboard"
+        navController.navigate(route) {
+            popUpTo(startDestinationId) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = !isStartDestination
+        }
+    }
+
     androidx.compose.runtime.LaunchedEffect(openRemindersRequest, isOnboardingCompleted) {
         if (openRemindersRequest > 0 && isOnboardingCompleted == true) {
-            navController.navigate("reminders") { launchSingleTop = true }
+            navigateToTopLevel("reminders")
             onNavigateToRemindersHandled()
         }
     }
@@ -137,11 +150,19 @@ fun MainNavigation(
             val onboardingVm: OnboardingViewModel = viewModel(
                 factory = OnboardingViewModel.Factory(app.userRepository)
             )
+            val canNavigateBack = navController.previousBackStackEntry != null
             OnboardingScreen(
                 viewModel = onboardingVm,
+                onNavigateBack = if (canNavigateBack) {
+                    { navController.popBackStack() }
+                } else null,
                 onNavigateToDashboard = {
-                    navController.navigate("dashboard") {
-                        popUpTo("onboarding") { inclusive = true }
+                    if (canNavigateBack) {
+                        navController.popBackStack()
+                    } else {
+                        navController.navigate("dashboard") {
+                            popUpTo("onboarding") { inclusive = true }
+                        }
                     }
                 }
             )
@@ -161,14 +182,9 @@ fun MainNavigation(
                 onNavigateToScanner = { navController.navigate("scanner") },
                 onNavigateToSetup = { navController.navigate("setup") },
                 onNavigateToModelSetup = { navController.navigate("setup?tab=1") },
-                onNavigateToReminders = { navController.navigate("reminders") { launchSingleTop = true } },
-                onResetOnboarding = {
-                    coroutineScope.launch {
-                        app.userRepository.resetOnboarding()
-                    }
-                    navController.navigate("onboarding") {
-                        popUpTo("dashboard") { inclusive = true }
-                    }
+                onNavigateToReminders = { navigateToTopLevel("reminders") },
+                onNavigateToProfile = {
+                    navController.navigate("onboarding") { launchSingleTop = true }
                 },
                 bottomContentPadding = if (showFloatingToolbar) toolbarContentPadding else 0.dp,
             )
@@ -277,13 +293,7 @@ fun MainNavigation(
                 destinations = primaryDestinations,
                 currentRoute = currentRoute,
                 hazeState = hazeState,
-                onNavigate = { route ->
-                    navController.navigate(route) {
-                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
+                onNavigate = navigateToTopLevel,
             )
             Surface(
                 onClick = { navController.navigate("chat") { launchSingleTop = true } },

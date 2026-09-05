@@ -166,31 +166,211 @@ object GemmaOutputParser {
      *
      * Returns an empty string if no JSON object delimiters are found.
      */
+    /**
+     * Extracts the primary JSON object from [rawText]. If the JSON was truncated
+     * before closing delimiters could be written, it automatically repairs and closes
+     * any unclosed braces/brackets so it can still be parsed.
+     *
+     * Returns an empty string if no JSON object delimiters are found.
+     */
     fun extractJson(rawText: String): String {
         val content = extractContent(rawText)
         val start = content.indexOf('{')
+        if (start == -1) return ""
         val end = content.lastIndexOf('}')
-        return if (start != -1 && end > start) {
-            sanitizeJsonObject(content.substring(start, end + 1))
-        } else {
-            ""
+        if (end > start) {
+            val candidate = sanitizeJsonObject(content.substring(start, end + 1))
+            try {
+                org.json.JSONObject(candidate)
+                return candidate
+            } catch (_: Exception) {
+                // Bracket mismatch or truncated interior, fall through to repair
+            }
         }
+        return repairJson(content.substring(start))
     }
 
     /**
-     * Extracts a JSON array string from [rawText].
+     * Extracts a JSON array string from [rawText]. If the JSON was truncated
+     * before closing brackets, it automatically repairs and closes them.
      *
      * Returns an empty string if no JSON array delimiters are found.
      */
     fun extractJsonArray(rawText: String): String {
         val content = extractContent(rawText)
         val start = content.indexOf('[')
+        if (start == -1) return ""
         val end = content.lastIndexOf(']')
-        return if (start != -1 && end > start) {
-            content.substring(start, end + 1)
-        } else {
-            ""
+        if (end > start) {
+            val candidate = content.substring(start, end + 1)
+            try {
+                org.json.JSONArray(candidate)
+                return candidate
+            } catch (_: Exception) {
+                // fall through to repair
+            }
         }
+        return repairJson(content.substring(start))
+    }
+
+    /**
+     * Repairs truncated JSON text by balancing unclosed braces and brackets
+     * in LIFO order and ensuring open string literals are closed.
+     */
+    fun repairJson(raw: String): String {
+        if (raw.isBlank()) return raw
+        val content = extractContent(raw).trim()
+        val start = content.indexOfAny(charArrayOf('{', '['))
+        if (start == -1) return ""
+        val candidate = content.substring(start)
+
+        val sb = StringBuilder(candidate.length + 16)
+        var inString = false
+        var escaping = false
+        val stack = ArrayDeque<Char>()
+
+        for (ch in candidate) {
+            if (inString) {
+                sb.append(ch)
+                if (escaping) {
+                    escaping = false
+                } else if (ch == '\\') {
+                    escaping = true
+                } else if (ch == '"') {
+                    inString = false
+                }
+                continue
+            }
+
+            when (ch) {
+                '"' -> {
+                    inString = true
+                    sb.append(ch)
+                }
+                '{' -> {
+                    stack.addLast('}')
+                    sb.append(ch)
+                }
+                '[' -> {
+                    stack.addLast(']')
+                    sb.append(ch)
+                }
+                '}', ']' -> {
+                    if (stack.isNotEmpty() && stack.last() == ch) {
+                        stack.removeLast()
+                    }
+                    sb.append(ch)
+                }
+                else -> sb.append(ch)
+            }
+        }
+
+        if (inString) {
+            sb.append('"')
+        }
+
+        var text = sb.toString().trimEnd()
+        while (text.endsWith(",") || text.endsWith(":") || text.endsWith(" ")) {
+            text = text.dropLast(1).trimEnd()
+        }
+
+        val repaired = StringBuilder(text)
+        while (stack.isNotEmpty()) {
+            repaired.append(stack.removeLast())
+        }
+
+        return sanitizeJsonObject(repaired.toString())
+    }
+
+    /**
+     * Resiliently extracts workout plans from raw model text using regex patterns
+     * even if JSON delimiters or surrounding wrappers were cut off.
+     */
+    fun extractWorkoutPlansFromText(rawText: String): List<com.xuan.fitai.data.model.WorkoutPlan> {
+        val content = extractContent(rawText)
+        val list = mutableListOf<com.xuan.fitai.data.model.WorkoutPlan>()
+        val itemPattern = Regex("""\{[^{}]*"exerciseName"\s*:\s*"([^"]+)"[^{}]*\}""")
+        val matches = itemPattern.findAll(content).toList()
+        for (m in matches) {
+            val block = m.value
+            val exerciseName = extractString(block, "exerciseName") ?: continue
+            val dayOfWeek = extractString(block, "dayOfWeek") ?: "星期一"
+            val sets = extractNumber(block, "sets")?.toInt() ?: 3
+            val reps = extractString(block, "reps") ?: "8-12次"
+            val targetMuscle = extractString(block, "targetMuscleGroup") ?: "全身"
+            list.add(
+                com.xuan.fitai.data.model.WorkoutPlan(
+                    dayOfWeek = dayOfWeek,
+                    exerciseName = exerciseName,
+                    sets = sets,
+                    reps = reps,
+                    targetMuscleGroup = targetMuscle,
+                )
+            )
+        }
+        return list
+    }
+
+    data class RepetitionLoop(
+        val startIndex: Int,
+        val unitLength: Int,
+        val count: Int,
+        val unit: String
+    )
+
+    /**
+     * Detects if the trailing portion of [rawText] has fallen into a degenerative
+     * repetition loop (e.g. "均衡均衡均衡均衡", "三餐飲用三餐飲用三餐飲用").
+     *
+     * Returns a [RepetitionLoop] describing where the loop began if detected,
+     * or null if the text is healthy.
+     */
+    fun detectRepetitionLoop(rawText: String): RepetitionLoop? {
+        val content = extractContent(rawText).trimEnd()
+        if (content.length < 6) return null
+
+        for (unitLen in 1..16) {
+            val threshold = if (unitLen == 1) 5 else 3
+            val neededLen = unitLen * threshold
+            if (content.length < neededLen) continue
+
+            val unit = content.takeLast(unitLen)
+            if (unit.isBlank()) continue
+
+            var count = 0
+            var idx = content.length
+            while (idx >= unitLen && content.regionMatches(idx - unitLen, unit, 0, unitLen)) {
+                count += 1
+                idx -= unitLen
+            }
+            if (count >= threshold) {
+                return RepetitionLoop(
+                    startIndex = idx,
+                    unitLength = unitLen,
+                    count = count,
+                    unit = unit
+                )
+            }
+        }
+        return null
+    }
+
+    /**
+     * Prunes a repetitive loop from [rawText], retaining only one occurrence of the unit
+     * and closing the sentence cleanly with punctuation.
+     */
+    fun pruneRepetitionLoop(rawText: String): String {
+        val loop = detectRepetitionLoop(rawText) ?: return rawText
+        val content = extractContent(rawText).trimEnd()
+        val rawPrefix = content.substring(0, (loop.startIndex + loop.unitLength).coerceAtMost(content.length)).trimEnd()
+        var cleanPrefix = rawPrefix.trimEnd(',', '，', '、', '：', ':', ' ', ';', '；', '-')
+        val boldCount = Regex("\\*\\*").findAll(cleanPrefix).count()
+        if (boldCount % 2 != 0) {
+            cleanPrefix += "**"
+        }
+        val suffix = if (cleanPrefix.endsWith("。") || cleanPrefix.endsWith("！") || cleanPrefix.endsWith("？") || cleanPrefix.endsWith(".")) "" else "。"
+        val thinking = extractThinking(rawText)
+        return withThinkingContent(thinkingText = thinking, contentText = cleanPrefix + suffix)
     }
 
     fun extractJsonStringValue(rawText: String, key: String): String? {
@@ -261,15 +441,16 @@ object GemmaOutputParser {
         val carbs = extractNumber(content, "carbs")
         val fat = extractNumber(content, "fat")
 
-        if (calories == null && protein == null && carbs == null && fat == null) {
+        if (calories == null || protein == null || carbs == null || fat == null ||
+            listOf(calories, protein, carbs, fat).any { !it.isFinite() || it < 0f }) {
             return null
         }
 
         return GemmaFoodAnalysis(
-            calories = calories ?: 200f,
-            protein = protein ?: 8f,
-            carbs = carbs ?: 20f,
-            fat = fat ?: 6f,
+            calories = calories,
+            protein = protein,
+            carbs = carbs,
+            fat = fat,
             isSuitable = extractBoolean(content, "suitable") ?: true,
             advice = extractString(content, "advice")
                 ?: "AI 已估算營養數值，但建議文字輸出不完整。",
@@ -285,26 +466,18 @@ object GemmaOutputParser {
             val cleanReply = extractJson(rawText)
             val json = org.json.JSONObject(cleanReply)
             GemmaFoodAnalysis(
-                calories = json.optDouble("calories", 150.0).toFloat(),
-                protein = json.optDouble("protein", 10.0).toFloat(),
-                carbs = json.optDouble("carbs", 12.0).toFloat(),
-                fat = json.optDouble("fat", 3.0).toFloat(),
+                calories = json.getDouble("calories").toFloat().also { require(it.isFinite() && it >= 0f) },
+                protein = json.getDouble("protein").toFloat().also { require(it.isFinite() && it >= 0f) },
+                carbs = json.getDouble("carbs").toFloat().also { require(it.isFinite() && it >= 0f) },
+                fat = json.getDouble("fat").toFloat().also { require(it.isFinite() && it >= 0f) },
                 isSuitable = json.optBoolean("suitable", true),
                 advice = json.optString("advice", "AI 已完成營養估算，請依實際份量微調。"),
                 reasoning = json.optString("reasoning", "依常見食物份量與營養比例估算。"),
                 thinking = thinkingText
             )
         } catch (e: Exception) {
-            extractPartialFoodAnalysis(rawText, thinkingText) ?: GemmaFoodAnalysis(
-                calories = 200f,
-                protein = 8f,
-                carbs = 20f,
-                fat = 6f,
-                isSuitable = true,
-                advice = "Gemma 回覆格式不完整，已提供保守估算。",
-                reasoning = "無法完整解析 JSON，請確認食物名稱與份量。",
-                thinking = thinkingText
-            )
+            extractPartialFoodAnalysis(rawText, thinkingText)
+                ?: throw IllegalStateException("AI 回覆未包含完整營養數值，請重試或增加上下文容量。", e)
         }
     }
 

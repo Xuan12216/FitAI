@@ -174,15 +174,15 @@ internal fun WeeklyOverview(days: List<DailySummary>) {
 }
 
 @Composable
-internal fun DailyAdviceCard(advice: String, generating: Boolean, hasModel: Boolean, onRefresh: () -> Unit, onSetup: () -> Unit) {
+internal fun DailyAdviceCard(advice: String, generating: Boolean, hasModel: Boolean, onRefresh: () -> Unit, onStop: () -> Unit, onSetup: () -> Unit) {
     OutlinedCard {
         Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(10.dp))
                 Text("AI 營養建議", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                if (hasModel) IconButton(onClick = onRefresh, enabled = !generating) {
-                    Icon(Icons.Default.Refresh, "重新產生建議")
+                if (hasModel) IconButton(onClick = if (generating) onStop else onRefresh) {
+                    Icon(if (generating) Icons.Default.Stop else Icons.Default.Refresh, if (generating) "停止生成" else "重新產生建議")
                 }
             }
             if (hasModel) {

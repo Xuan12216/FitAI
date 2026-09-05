@@ -16,6 +16,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.runtime.key
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -38,11 +42,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -112,19 +118,31 @@ fun ReminderScreen(viewModel: ReminderViewModel, bottomContentPadding: Dp = 0.dp
 
     androidx.compose.runtime.LaunchedEffect(settings) { ReminderScheduler.scheduleAll(context, settings) }
 
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("提醒與習慣", fontWeight = FontWeight.Bold) }
-            )
+            key(statusBarHeight) {
+                CenterAlignedTopAppBar(
+                    title = { Text("提醒與習慣", fontWeight = FontWeight.Bold) },
+                    windowInsets = WindowInsets(0, 0, 0, 0),
+                    contentPadding = PaddingValues(top = statusBarHeight),
+                    scrollBehavior = scrollBehavior
+                )
+            }
         }
     ) { padding ->
         Column(
-            modifier = Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp + bottomContentPadding),
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            Spacer(Modifier.height(padding.calculateTopPadding()))
             if (isBatteryOptimized) {
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -240,7 +258,7 @@ fun ReminderScreen(viewModel: ReminderViewModel, bottomContentPadding: Dp = 0.dp
                     Text("在這段時間外不會提醒。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(16.dp + bottomContentPadding))
         }
     }
 }

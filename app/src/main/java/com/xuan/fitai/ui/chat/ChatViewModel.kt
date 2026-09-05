@@ -4,7 +4,9 @@ import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import android.util.Log
 import com.xuan.fitai.ai.GemmaLocalHelper
+import com.xuan.fitai.ai.GemmaOutputParser
 import com.xuan.fitai.ai.PromptBuilder
 import com.xuan.fitai.data.local.ChatDao
 import com.xuan.fitai.data.model.ChatMessage
@@ -13,6 +15,7 @@ import com.xuan.fitai.data.model.UserProfile
 import com.xuan.fitai.data.repository.MealRepository
 import com.xuan.fitai.data.repository.UserRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -46,6 +49,8 @@ class ChatViewModel(
     val visionReady = gemmaHelper.visionReady
     val audioReady = gemmaHelper.audioReady
 
+    private var generationJob: Job? = null
+
     private val _isGenerating = MutableStateFlow(false)
     val isGenerating: StateFlow<Boolean> = _isGenerating.asStateFlow()
 
@@ -60,66 +65,71 @@ class ChatViewModel(
         userMessage: String,
         images: List<Bitmap> = emptyList(),
         audioBytes: ByteArray? = null,
-    ) {
-        if (userMessage.isBlank() && images.isEmpty() && audioBytes?.isNotEmpty() != true) return
-        if (_isGenerating.value) return
+    ): Boolean {
+        if (userMessage.isBlank() && images.isEmpty() && audioBytes?.isNotEmpty() != true) return false
+        if (_isGenerating.value) return false
 
-        viewModelScope.launch {
-            _errorMsg.value = null
-            if (gemmaLoadState.value != ModelLoadState.Loaded) {
-                _errorMsg.value = "請先至「模型設定」頁面載入 Gemma AI 模型"
-                return@launch
-            }
+        _errorMsg.value = null
+        if (gemmaLoadState.value != ModelLoadState.Loaded) {
+            _errorMsg.value = "請先至「模型設定」頁面載入 Gemma AI 模型"
+            return false
+        }
 
-            if (images.isNotEmpty() && !visionReady.value) {
-                _errorMsg.value = "目前載入的 Gemma 模型不支援圖片辨識"
-                return@launch
-            }
-            if (audioBytes?.isNotEmpty() == true && !audioReady.value) {
-                _errorMsg.value = "目前載入的 Gemma 模型不支援語音辨識"
-                return@launch
-            }
+        if (images.isNotEmpty() && !visionReady.value) {
+            _errorMsg.value = "目前載入的 Gemma 模型不支援圖片辨識"
+            return false
+        }
+        if (audioBytes?.isNotEmpty() == true && !audioReady.value) {
+            _errorMsg.value = "目前載入的 Gemma 模型不支援語音辨識"
+            return false
+        }
 
-            val hasAudio = audioBytes?.isNotEmpty() == true
-            val mediaInstruction = when {
-                images.isNotEmpty() && hasAudio ->
-                    "請實際查看附上的圖片並聆聽附上的語音。先轉寫語音，再結合圖片內容回答。"
-                images.isNotEmpty() ->
-                    "請實際查看附上的圖片，描述你看到的內容並回答。"
-                hasAudio ->
-                    "請實際聆聽附上的語音，先轉寫語音內容，再根據內容回答。不要假設沒有語音。"
-                else -> ""
-            }
-            val promptText = userMessage.trim().ifBlank {
-                mediaInstruction.ifBlank { "請用繁體中文回答。" }
-            }
-            val promptForModel = if (mediaInstruction.isNotBlank() && userMessage.isNotBlank()) {
-                "$mediaInstruction\n${userMessage.trim()}"
-            } else {
-                promptText
-            }
-            val storedUserContent = buildString {
-                if (userMessage.isNotBlank()) {
-                    append(userMessage.trim())
-                } else if (images.isNotEmpty()) {
-                    append("圖片")
-                } else if (audioBytes?.isNotEmpty() == true) {
-                    append("語音")
-                }
-            }.ifBlank { promptText }
-
-            // Insert User Message
-            val userMsgObj = ChatMessage(
-                role = "user",
-                content = storedUserContent,
-                audioBytes = audioBytes,
-                imageBytes = ChatImageCodec.encode(images),
-            )
-            chatDao.insertMessage(userMsgObj)
-
-            _isGenerating.value = true
-
+        _isGenerating.value = true
+        generationJob = viewModelScope.launch {
+            var currentText = ""
             try {
+                val hasAudio = audioBytes?.isNotEmpty() == true
+                val mediaInstruction = when {
+                    images.isNotEmpty() && hasAudio ->
+                        "請實際查看附上的圖片並聆聽附上的語音。先轉寫語音，再結合圖片內容回答。"
+                    images.isNotEmpty() ->
+                        "請實際查看附上的圖片，描述你看到的內容並回答。"
+                    hasAudio ->
+                        "請實際聆聽附上的語音，先轉寫語音內容，再根據內容回答。不要假設沒有語音。"
+                    else -> ""
+                }
+                val promptText = userMessage.trim().ifBlank {
+                    mediaInstruction.ifBlank { "請用繁體中文回答。" }
+                }
+                val promptForModel = if (mediaInstruction.isNotBlank() && userMessage.isNotBlank()) {
+                    "$mediaInstruction\n${userMessage.trim()}"
+                } else {
+                    promptText
+                }
+                val storedUserContent = buildString {
+                    if (userMessage.isNotBlank()) {
+                        append(userMessage.trim())
+                    } else if (images.isNotEmpty()) {
+                        append("圖片")
+                    } else if (audioBytes?.isNotEmpty() == true) {
+                        append("語音")
+                    }
+                }.ifBlank { promptText }
+
+                val contextTokens = gemmaHelper.contextTokenLimit.first()
+                val history = PromptBuilder.recentConversation(
+                    chatDao.getAllMessages().first().map { it.role to it.content },
+                    contextTokens,
+                )
+                // Insert User Message
+                val userMsgObj = ChatMessage(
+                    role = "user",
+                    content = storedUserContent,
+                    audioBytes = audioBytes,
+                    imageBytes = ChatImageCodec.encode(images),
+                )
+                chatDao.insertMessage(userMsgObj)
+
                 // Compute current day totals
                 val mealsList = todayMeals.value
                 val cal = mealsList.sumOf { it.calories.toDouble() }.toFloat()
@@ -134,10 +144,12 @@ class ChatViewModel(
                     todayProtein = prot,
                     todayCarbs = carb,
                     todayFat = fat,
-                    userMessage = promptForModel
+                    userMessage = promptForModel,
+                    recentConversation = history,
+                    maxTokens = contextTokens,
                 )
 
-                var currentText = ""
+                currentText = ""
                 val responseFlow = if (images.isNotEmpty() || audioBytes?.isNotEmpty() == true) {
                     gemmaHelper.generateReplyWithMediaFlow(
                         prompt = fullPrompt,
@@ -153,20 +165,36 @@ class ChatViewModel(
                     }
                     currentText += token
                     _streamingMessage.value = ChatMessage(role = "assistant", content = currentText)
+                    if (GemmaOutputParser.detectRepetitionLoop(currentText) != null) {
+                        throw RepetitionLoopException()
+                    }
                 }
 
-                if (currentText.isNotEmpty()) {
-                    chatDao.insertMessage(ChatMessage(role = "assistant", content = currentText))
+                val finalContent = GemmaOutputParser.pruneRepetitionLoop(currentText).trim()
+                check(finalContent.isNotBlank()) { "模型沒有回覆，請重試或增加上下文容量。" }
+                chatDao.insertMessage(ChatMessage(role = "assistant", content = finalContent))
+            } catch (e: RepetitionLoopException) {
+                Log.w("FitAI_ChatVM", "Repetition loop detected during generation; pruning and finishing early.")
+                val pruned = GemmaOutputParser.pruneRepetitionLoop(currentText).trim()
+                if (pruned.isNotBlank()) {
+                    chatDao.insertMessage(ChatMessage(role = "assistant", content = pruned))
                 }
             } catch (e: CancellationException) {
+                _errorMsg.value = "已停止生成，可以重新傳送。"
                 throw e
             } catch (e: Exception) {
                 _errorMsg.value = "Gemma 回覆失敗: ${e.localizedMessage}"
             } finally {
                 _streamingMessage.value = null
                 _isGenerating.value = false
+                generationJob = null
             }
         }
+        return true
+    }
+
+    fun stopGeneration() {
+        generationJob?.cancel()
     }
 
     fun clearChat() {
@@ -189,4 +217,6 @@ class ChatViewModel(
             throw IllegalArgumentException("Unknown ViewModel class")
         }
     }
+
+    private class RepetitionLoopException : CancellationException("Repetition loop detected")
 }

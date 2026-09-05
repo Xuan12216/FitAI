@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 
 class FitAIApplication : Application() {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -43,6 +44,10 @@ class FitAIApplication : Application() {
         reminderRepository.settings
             .onEach { ReminderScheduler.scheduleAll(this, it) }
             .launchIn(applicationScope)
+        
+        applicationScope.launch {
+            userPreferenceStore.repairOnboardingIfDataExists()
+        }
         
         gemmaHelper = GemmaLocalHelperImpl(this)
         classifierHelper = FoodClassifierHelperImpl(this)

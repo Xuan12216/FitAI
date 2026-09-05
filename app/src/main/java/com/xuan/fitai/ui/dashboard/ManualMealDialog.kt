@@ -74,7 +74,7 @@ internal fun ManualMealDialog(viewModel: DashboardViewModel, onDismiss: () -> Un
                                 } catch (e: CancellationException) {
                                     throw e
                                 } catch (e: Exception) {
-                                    aiErrorMsg = "⚠️ 估算失敗！請確認已在「模型設定」頁面載入 Gemma 模型。"
+                                    aiErrorMsg = "估算未完成：${e.localizedMessage ?: "請稍後再試"}"
                                 } finally {
                                     isAiAnalyzing = false
                                 }

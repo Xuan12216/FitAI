@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -31,7 +32,7 @@ fun DashboardScreen(
     onNavigateToSetup: () -> Unit,
     onNavigateToModelSetup: () -> Unit,
     onNavigateToReminders: () -> Unit,
-    onResetOnboarding: () -> Unit,
+    onNavigateToProfile: () -> Unit,
     bottomContentPadding: Dp = 0.dp,
 ) {
     val profile by viewModel.userProfile.collectAsStateWithLifecycle()
@@ -50,28 +51,38 @@ fun DashboardScreen(
     var waterBusy by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<Meal?>(null) }
 
-    DisposableEffect(viewModel) {
-        viewModel.setAdviceGenerationActive(true)
+    DisposableEffect(viewModel, showManualAdd) {
+        viewModel.setAdviceGenerationActive(!showManualAdd)
         onDispose { viewModel.setAdviceGenerationActive(false) }
     }
 
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = bottomContentPadding)) },
         topBar = {
-            TopAppBar(
-                title = { Text("FitAI", fontWeight = FontWeight.Bold) },
-                actions = {
-                    IconButton(onClick = onNavigateToSetup) { Icon(Icons.Default.Tune, "外觀與 AI 設定") }
-                    IconButton(onClick = onResetOnboarding) { Icon(Icons.Default.AccountCircle, "編輯個人資料") }
-                }
-            )
+            key(statusBarHeight) {
+                TopAppBar(
+                    title = { Text("FitAI", fontWeight = FontWeight.Bold) },
+                    actions = {
+                        IconButton(onClick = onNavigateToSetup) { Icon(Icons.Default.Tune, "外觀與 AI 設定") }
+                        IconButton(onClick = onNavigateToProfile) { Icon(Icons.Default.AccountCircle, "編輯個人資料") }
+                    },
+                    expandedHeight = TopAppBarDefaults.TopAppBarExpandedHeight,
+                    windowInsets = WindowInsets(0, 0, 0, 0),
+                    contentPadding = PaddingValues(top = statusBarHeight),
+                    scrollBehavior = scrollBehavior
+                )
+            }
         }
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp + bottomContentPadding),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = padding.calculateTopPadding() + 8.dp, bottom = 24.dp + bottomContentPadding),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
@@ -146,7 +157,7 @@ fun DashboardScreen(
                 items(meals, key = { it.id }) { meal -> MealLogCard(meal, onDelete = { pendingDelete = meal }) }
             }
             item { WeeklyOverview(week) }
-            item { DailyAdviceCard(advice, generating, modelName != null, viewModel::refreshDailyAdvice, onNavigateToModelSetup) }
+            item { DailyAdviceCard(advice, generating, modelName != null, viewModel::refreshDailyAdvice, viewModel::stopDailyAdvice, onNavigateToModelSetup) }
         }
     }
     if (showManualAdd) ManualMealDialog(viewModel) { showManualAdd = false }

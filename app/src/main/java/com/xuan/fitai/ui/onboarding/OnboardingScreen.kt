@@ -13,13 +13,18 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.xuan.fitai.ui.components.AppLoadingIndicator
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+
 import androidx.compose.ui.text.style.TextAlign
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OnboardingScreen(
     viewModel: OnboardingViewModel,
-    onNavigateToDashboard: () -> Unit
+    onNavigateToDashboard: () -> Unit,
+    onNavigateBack: (() -> Unit)? = null
 ) {
     val isLoaded by viewModel.isLoaded.collectAsState()
     val profile by viewModel.profile.collectAsState()
@@ -35,15 +40,39 @@ fun OnboardingScreen(
         return
     }
 
-    var ageText by remember { mutableStateOf(profile.age.toString()) }
-    var heightText by remember { mutableStateOf(profile.height.toString()) }
-    var weightText by remember { mutableStateOf(profile.weight.toString()) }
+    var ageText by remember(profile.age) { mutableStateOf(profile.age.toString()) }
+    var heightText by remember(profile.height) {
+        mutableStateOf(if (profile.height % 1f == 0f) profile.height.toInt().toString() else profile.height.toString())
+    }
+    var weightText by remember(profile.weight) {
+        mutableStateOf(if (profile.weight % 1f == 0f) profile.weight.toInt().toString() else profile.weight.toString())
+    }
+
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("個人健康設定", fontWeight = FontWeight.Bold) }
-            )
+            key(statusBarHeight) {
+                CenterAlignedTopAppBar(
+                    title = { Text("個人健康設定", fontWeight = FontWeight.Bold) },
+                    navigationIcon = {
+                        if (onNavigateBack != null) {
+                            IconButton(onClick = onNavigateBack) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "返回"
+                                )
+                            }
+                        }
+                    },
+                    windowInsets = WindowInsets(0, 0, 0, 0),
+                    contentPadding = PaddingValues(top = statusBarHeight),
+                    scrollBehavior = scrollBehavior
+                )
+            }
         }
     ) { innerPadding ->
         Column(
@@ -214,8 +243,15 @@ fun OnboardingScreen(
                     .height(50.dp),
                 shape = MaterialTheme.shapes.medium
             ) {
-                Text("完成設定，進入首頁", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    if (onNavigateBack != null) "儲存設定" else "完成設定，進入首頁",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
             }
+
+            Spacer(modifier = Modifier.navigationBarsPadding())
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

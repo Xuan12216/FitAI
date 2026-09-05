@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.xuan.fitai.ai.GemmaLocalHelper
+import com.xuan.fitai.ai.GemmaOutputParser
 import com.xuan.fitai.data.model.Meal
 import com.xuan.fitai.data.model.ModelLoadState
 import com.xuan.fitai.data.model.UserProfile
@@ -66,7 +67,7 @@ class DashboardViewModel(
 
     private val dashboardActive = MutableStateFlow(false)
     private var lastGeneratedAdviceSignature: String? = null
-    private var lastRequestedAdviceSignature: String? = null
+    private val refreshVersion = MutableStateFlow(0)
 
     val loadedModelName: StateFlow<String?> = gemmaHelper.loadedModelName
 
@@ -89,14 +90,14 @@ class DashboardViewModel(
     init {
         // Automatically generate advice when profile, meals, or AI load state updates
         viewModelScope.launch {
-            combine(userProfile, todayMeals, gemmaHelper.loadState, dashboardActive) { profile, meals, loadState, isActive ->
+            combine(userProfile, todayMeals, gemmaHelper.loadState, dashboardActive, refreshVersion) { profile, meals, loadState, isActive, version ->
                 val input = DashboardAdviceInput(profile, meals, loadState, isActive)
                 val request = DashboardAdviceRequest(
                     profile = profile,
                     meals = meals,
                     loadState = loadState,
                     isActive = isActive,
-                    eventSignature = input.eventSignature(),
+                    eventSignature = "${input.eventSignature()}|$version",
                     contentSignature = input.contentSignature()
                 )
                 android.util.Log.d(
@@ -115,10 +116,6 @@ class DashboardViewModel(
                 }
                 if (input.loadState == ModelLoadState.Loaded && lastGeneratedAdviceSignature == input.contentSignature) {
                     android.util.Log.d("FitAI_VM", "DashboardViewModel skipped advice: duplicate contentSignature=${input.contentSignature}")
-                    return@collectLatest
-                }
-                if (input.loadState == ModelLoadState.Loaded && lastRequestedAdviceSignature == input.contentSignature) {
-                    android.util.Log.d("FitAI_VM", "DashboardViewModel skipped advice: duplicate in-flight/requested contentSignature=${input.contentSignature}")
                     return@collectLatest
                 }
                 android.util.Log.d("FitAI_VM", "DashboardViewModel collecting flow: calling generateDailyAdvice")
@@ -149,22 +146,14 @@ class DashboardViewModel(
         dashboardActive.value = active
     }
 
+    fun stopDailyAdvice() {
+        dashboardActive.value = false
+    }
+
     fun refreshDailyAdvice() {
-        viewModelScope.launch {
-            lastGeneratedAdviceSignature = null
-            lastRequestedAdviceSignature = null
-            generateDailyAdvice(
-                profile = userProfile.value,
-                meals = todayMeals.value,
-                loadState = gemmaHelper.loadState.value,
-                contentSignature = DashboardAdviceInput(
-                    profile = userProfile.value,
-                    meals = todayMeals.value,
-                    loadState = gemmaHelper.loadState.value,
-                    isActive = true
-                ).contentSignature()
-            )
-        }
+        dashboardActive.value = true
+        lastGeneratedAdviceSignature = null
+        refreshVersion.update { it + 1 }
     }
 
     private suspend fun generateDailyAdvice(
@@ -191,17 +180,20 @@ class DashboardViewModel(
         val totalProtein = meals.sumOf { it.protein.toDouble() }.toFloat()
         val totalCarbs = meals.sumOf { it.carbs.toDouble() }.toFloat()
         val totalFat = meals.sumOf { it.fat.toDouble() }.toFloat()
+        val maxTokens = gemmaHelper.contextTokenLimit.first()
 
-        val prompt = """
-            你是一位專業健康顧問。使用者目標是「${profile.goal}」。
-            今日熱量目標為 ${profile.targetCalories.toInt()} kcal，已攝取 $totalCalories kcal。
-            今日三大營養素已攝取：蛋白質 ${totalProtein.toInt()}g，碳水 ${totalCarbs.toInt()}g，脂肪 ${totalFat.toInt()}g。
-            請根據以上數據，只輸出一段 100 個中文字以內的繁體中文實用建議。
-        """.trimIndent()
+        val prompt = com.xuan.fitai.ai.PromptBuilder.buildDashboardAdvicePrompt(
+            profile = profile,
+            todayCalories = totalCalories,
+            todayProtein = totalProtein,
+            todayCarbs = totalCarbs,
+            todayFat = totalFat,
+            maxTokens = maxTokens,
+        )
 
         try {
             _isAiAdviceGenerating.value = true
-            lastRequestedAdviceSignature = contentSignature
+            _aiAdvice.value = ""
             android.util.Log.d("FitAI_VM", "generateDailyAdvice: calling generateReplyFlow")
             collectAdviceWithOneRetry(prompt)
             lastGeneratedAdviceSignature = contentSignature
@@ -211,7 +203,6 @@ class DashboardViewModel(
         } catch (e: Exception) {
             android.util.Log.e("FitAI_VM", "generateDailyAdvice failed", e)
             _aiAdvice.value = "今日健康建議產生失敗: ${e.localizedMessage}"
-            lastRequestedAdviceSignature = null
         } finally {
             _isAiAdviceGenerating.value = false
             android.util.Log.d("FitAI_VM", "generateDailyAdvice finished")
@@ -226,7 +217,16 @@ class DashboardViewModel(
                 gemmaHelper.generateReplyFlow(prompt).collect { token ->
                     currentText += token
                     _aiAdvice.value = currentText
+                    if (GemmaOutputParser.detectRepetitionLoop(currentText) != null) {
+                        throw RepetitionLoopException()
+                    }
                 }
+                _aiAdvice.value = GemmaOutputParser.pruneRepetitionLoop(currentText).trim()
+                return
+            } catch (e: RepetitionLoopException) {
+                android.util.Log.w("FitAI_VM", "Repetition loop detected in daily advice; pruning and finishing early.")
+                val pruned = GemmaOutputParser.pruneRepetitionLoop(_aiAdvice.value).trim()
+                _aiAdvice.value = pruned
                 return
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
@@ -294,4 +294,6 @@ class DashboardViewModel(
             throw IllegalArgumentException("Unknown ViewModel class")
         }
     }
+
+    private class RepetitionLoopException : CancellationException("Repetition loop detected")
 }

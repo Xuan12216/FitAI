@@ -5,6 +5,8 @@ import com.xuan.fitai.data.model.ModelLoadState
 import kotlinx.coroutines.flow.StateFlow
 
 interface GemmaLocalHelper {
+    val contextTokenLimit: kotlinx.coroutines.flow.Flow<Int>
+        get() = kotlinx.coroutines.flow.flowOf(com.xuan.fitai.data.model.ContextTokenLimits.DEFAULT)
     val loadState: StateFlow<ModelLoadState>
     val loadedModelName: StateFlow<String?>
     val visionReady: StateFlow<Boolean>

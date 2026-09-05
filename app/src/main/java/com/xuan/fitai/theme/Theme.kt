@@ -75,6 +75,7 @@ fun FitAITheme(
   // Dynamic color is available on Android 12+
   dynamicColor: Boolean = false,
   customHue: Int? = null,
+  customSaturation: Float? = null,
   content: @Composable () -> Unit,
 ) {
   val colorScheme =
@@ -83,7 +84,9 @@ fun FitAITheme(
         val context = LocalContext.current
         if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
       }
-      customHue != null -> remember(customHue, darkTheme) { customColorScheme(customHue, darkTheme) }
+      customHue != null -> remember(customHue, customSaturation, darkTheme) {
+        customColorScheme(hue = customHue, dark = darkTheme, saturation = customSaturation ?: 0.52f)
+      }
       darkTheme -> DarkColorScheme
       else -> LightColorScheme
     }

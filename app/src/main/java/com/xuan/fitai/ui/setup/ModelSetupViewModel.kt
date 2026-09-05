@@ -57,7 +57,7 @@ class ModelSetupViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, 1.0f)
 
     val useGpu: StateFlow<Boolean> = userPreferenceStore.useGpuFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
     val enableThinking: StateFlow<Boolean> = userPreferenceStore.enableThinkingFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)

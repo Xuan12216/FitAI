@@ -7,9 +7,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 
 // Custom accent and tinted surfaces, with separate light/dark tones.
-internal fun customColorScheme(hue: Int, dark: Boolean): ColorScheme {
-    fun tone(saturation: Float, lightness: Float, offset: Int = 0) =
-        Color.hsl(((hue + offset) % 360 + 360).rem(360).toFloat(), saturation, lightness)
+internal fun customColorScheme(hue: Int, dark: Boolean, saturation: Float = 0.52f): ColorScheme {
+    val satRatio = (saturation / 0.52f).coerceIn(0.2f, 2.0f)
+    fun tone(baseSaturation: Float, lightness: Float, offset: Int = 0) =
+        Color.hsl(
+            ((hue + offset) % 360 + 360).rem(360).toFloat(),
+            (baseSaturation * satRatio).coerceIn(0f, 1f),
+            lightness
+        )
     fun foreground(color: Color) = if (color.luminance() > 0.179f) Color.Black else Color.White
     val primary = tone(0.52f, if (dark) 0.76f else 0.35f)
     val secondary = tone(0.24f, if (dark) 0.76f else 0.35f, 35)

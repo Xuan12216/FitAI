@@ -37,6 +37,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -202,7 +203,7 @@ fun ChatScreen(
         val hasAttachment = selectedImages.isNotEmpty() || audioBytes?.isNotEmpty() == true
         if (isGenerating || isRecording || (inputQuery.isBlank() && !hasAttachment)) return
         audioPlayer.stop { playingAudioId = it }
-        viewModel.sendMessage(inputQuery, selectedImages, audioBytes)
+        if (!viewModel.sendMessage(inputQuery, selectedImages, audioBytes)) return
         inputQuery = ""
         selectedImages = emptyList()
         previewImageIndex = null
@@ -638,13 +639,13 @@ fun ChatScreen(
                                 onValueChange = { inputQuery = it },
                                 placeholder = { Text("輸入訊息...") },
                                 maxLines = 3,
-                                enabled = !isGenerating,
+                                readOnly = isGenerating,
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                                 keyboardActions = KeyboardActions(onSend = { sendCurrentMessage() }),
                                 trailingIcon = {
                                     IconButton(
-                                        onClick = { sendCurrentMessage() },
-                                        enabled = !isGenerating && (
+                                        onClick = { if (isGenerating) viewModel.stopGeneration() else sendCurrentMessage() },
+                                        enabled = isGenerating || (
                                             inputQuery.isNotBlank() ||
                                                 selectedImages.isNotEmpty() ||
                                                 audioBytes?.isNotEmpty() == true
@@ -663,8 +664,8 @@ fun ChatScreen(
                                         ),
                                     ) {
                                         Icon(
-                                            imageVector = Icons.AutoMirrored.Filled.Send,
-                                            contentDescription = "送出訊息",
+                                            imageVector = if (isGenerating) Icons.Default.Stop else Icons.AutoMirrored.Filled.Send,
+                                            contentDescription = if (isGenerating) "停止生成" else "送出訊息",
                                         )
                                     }
                                 },
