@@ -1,8 +1,6 @@
 package com.xuan.fitai
 
-import android.Manifest
 import android.graphics.Color
-import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -20,10 +18,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.Modifier
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import com.xuan.fitai.theme.FitAITheme
 import com.xuan.fitai.ui.components.LoadingDialog
+import com.xuan.fitai.data.model.AppearanceSettings
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 class MainActivity : ComponentActivity() {
     private var openRemindersRequest by mutableIntStateOf(0)
@@ -33,7 +31,6 @@ class MainActivity : ComponentActivity() {
 
         val app = application as FitAIApplication
         handleNotificationIntent(intent)
-        requestNotificationPermissionIfNeeded()
 
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
@@ -44,7 +41,8 @@ class MainActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
         setContent {
-            FitAITheme {
+            val appearance by app.userPreferenceStore.appearanceFlow.collectAsStateWithLifecycle(initialValue = AppearanceSettings())
+            FitAITheme(dynamicColor = appearance.useWallpaperColors, customHue = appearance.customHue) {
                 var startupInitializing by remember { mutableStateOf(true) }
 
                 LaunchedEffect(Unit) {
@@ -85,19 +83,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun requestNotificationPermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
-
-        ActivityCompat.requestPermissions(
-            this,
-            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-            NOTIFICATION_PERMISSION_REQUEST_CODE
-        )
-    }
-
     private companion object {
-        const val NOTIFICATION_PERMISSION_REQUEST_CODE = 2001
         const val EXTRA_OPEN_REMINDERS = "open_reminders"
     }
 }
@@ -106,6 +92,6 @@ class MainActivity : ComponentActivity() {
 private fun StartupLoadingDialog() {
     LoadingDialog(
         title = "FitAI",
-        message = "Preparing your local AI experience."
+        message = "正在準備你的 AI 助理…"
     )
 }

@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 
 class ReminderViewModel(private val repository: ReminderRepository) : ViewModel() {
     val settings: StateFlow<ReminderSettings> = repository.settings
@@ -24,13 +23,8 @@ class ReminderViewModel(private val repository: ReminderRepository) : ViewModel(
         current.copy(meals = defaultMeals(count))
     }
 
-    fun addWater(amountMl: Int) = update { current ->
-        val today = LocalDate.now().toString()
-        val consumed = if (current.waterProgressDate == today) current.waterConsumedMl else 0
-        current.copy(
-            waterConsumedMl = (consumed + amountMl).coerceAtMost(current.waterTargetMl),
-            waterProgressDate = today
-        )
+    fun addWater(amountMl: Int) {
+        viewModelScope.launch { repository.changeWater(amountMl) }
     }
 
     private fun defaultMeals(count: Int): List<MealReminder> = when (count) {

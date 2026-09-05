@@ -67,9 +67,13 @@ import androidx.compose.runtime.DisposableEffect
 fun ReminderScreen(viewModel: ReminderViewModel, bottomContentPadding: Dp = 0.dp) {
     val settings by viewModel.settings.collectAsState()
     val context = LocalContext.current
-    val notificationPermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    var notificationPermissionGranted by remember {
+        mutableStateOf(Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        notificationPermissionGranted = it
+    }
 
     val powerManager = remember { context.getSystemService(Context.POWER_SERVICE) as PowerManager }
     val alarmManager = remember { context.getSystemService(Context.ALARM_SERVICE) as AlarmManager }
@@ -78,6 +82,8 @@ fun ReminderScreen(viewModel: ReminderViewModel, bottomContentPadding: Dp = 0.dp
     var isExactAlarmPermissionMissing by remember { mutableStateOf(false) }
 
     fun checkPermissions() {
+        notificationPermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         isBatteryOptimized = !powerManager.isIgnoringBatteryOptimizations(context.packageName)
         isExactAlarmPermissionMissing = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             !alarmManager.canScheduleExactAlarms()

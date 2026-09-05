@@ -9,24 +9,54 @@ import com.xuan.fitai.data.model.ModelLoadState
 import com.xuan.fitai.data.model.UserProfile
 import com.xuan.fitai.data.repository.MealRepository
 import com.xuan.fitai.data.repository.UserRepository
+import com.xuan.fitai.data.repository.ReminderRepository
+import com.xuan.fitai.data.model.ReminderSettings
+import com.xuan.fitai.util.currentDateFlow
+import java.time.LocalDate
+import java.time.ZoneId
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
-@OptIn(FlowPreview::class)
+@OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class DashboardViewModel(
     private val userRepository: UserRepository,
     private val mealRepository: MealRepository,
-    private val gemmaHelper: GemmaLocalHelper
+    private val gemmaHelper: GemmaLocalHelper,
+    private val reminderRepository: ReminderRepository
 ) : ViewModel() {
 
     val userProfile: StateFlow<UserProfile> = userRepository.userProfile
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UserProfile())
 
-    val todayMeals: StateFlow<List<Meal>> = mealRepository.getMealsForDay(System.currentTimeMillis())
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val today = currentDateFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LocalDate.now())
+
+    private val weekMeals = today.flatMapLatest { date ->
+        val zone = ZoneId.systemDefault()
+        mealRepository.getMealsBetween(
+            date.minusDays(6).atStartOfDay(zone).toInstant().toEpochMilli(),
+            date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val todayMeals: StateFlow<List<Meal>> = combine(today, weekMeals) { date, meals ->
+        val start = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val end = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        meals.filter { it.timestamp >= start && it.timestamp < end }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val weekSummary = combine(today, weekMeals) { date, meals -> summarizeWeek(meals, date) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), summarizeWeek(emptyList(), LocalDate.now()))
+
+    val waterSettings = combine(today, reminderRepository.settings) { date, settings ->
+        settings.copy(waterConsumedMl = if (settings.waterProgressDate == date.toString()) settings.waterConsumedMl else 0)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ReminderSettings())
+
+    suspend fun changeWater(amountMl: Int, date: LocalDate) = reminderRepository.changeWater(amountMl, date)
 
     private val _aiAdvice = MutableStateFlow("正在為您產生今日本地 AI 健康建議...")
     val aiAdvice: StateFlow<String> = _aiAdvice.asStateFlow()
@@ -253,12 +283,13 @@ class DashboardViewModel(
     class Factory(
         private val userRepository: UserRepository,
         private val mealRepository: MealRepository,
-        private val gemmaHelper: GemmaLocalHelper
+        private val gemmaHelper: GemmaLocalHelper,
+        private val reminderRepository: ReminderRepository
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(DashboardViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return DashboardViewModel(userRepository, mealRepository, gemmaHelper) as T
+                return DashboardViewModel(userRepository, mealRepository, gemmaHelper, reminderRepository) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

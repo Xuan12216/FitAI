@@ -18,7 +18,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 
 class ReminderNotificationReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -30,13 +29,7 @@ class ReminderNotificationReceiver : BroadcastReceiver() {
                 val app = context.applicationContext as FitAIApplication
                 when (intent.action) {
                     ACTION_ADD_WATER -> {
-                        val current = app.reminderRepository.settings.first()
-                        val today = LocalDate.now().toString()
-                        val consumed = if (current.waterProgressDate == today) current.waterConsumedMl else 0
-                        app.reminderRepository.save(current.copy(
-                            waterConsumedMl = (consumed + 250).coerceAtMost(current.waterTargetMl),
-                            waterProgressDate = today
-                        ))
+                        app.reminderRepository.changeWater(250)
                         NotificationManagerCompat.from(context).cancel(WATER_NOTIFICATION_ID)
                         ReminderScheduler.scheduleAll(context, app.reminderRepository.settings.first())
                     }

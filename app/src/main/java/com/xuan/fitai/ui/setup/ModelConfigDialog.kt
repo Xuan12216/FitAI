@@ -1,8 +1,5 @@
 package com.xuan.fitai.ui.setup
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -11,150 +8,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.xuan.fitai.data.model.ModelDownloadState
-import com.xuan.fitai.data.model.ModelLoadState
-import com.xuan.fitai.data.model.ModelType
-import com.xuan.fitai.ui.components.LoadingDialog
-import com.xuan.fitai.ui.components.ModelStatusCard
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ModelSetupScreen(
-    viewModel: ModelSetupViewModel,
-    onNavigateBack: () -> Unit
-) {
-    val context = LocalContext.current
-    val models by viewModel.allModels.collectAsState()
-    val downloadStates by viewModel.downloadStates.collectAsState()
-    val gemmaLoadState by viewModel.gemmaLoadState.collectAsState()
-    val classifierLoadState by viewModel.classifierLoadState.collectAsState()
-    val loadedModelName by viewModel.loadedModelName.collectAsState()
-    val isApplyingModelConfig by viewModel.isApplyingModelConfig.collectAsState()
-    val isModelLoading = gemmaLoadState is ModelLoadState.Loading ||
-            classifierLoadState is ModelLoadState.Loading
-
-    val scrollState = rememberScrollState()
-    var selectedModelIdForImport by remember { mutableStateOf<String?>(null) }
-    var showConfigDialog by remember { mutableStateOf(false) }
-
-    // Storage Access Framework file picker
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri != null && selectedModelIdForImport != null) {
-            viewModel.importLocalFile(selectedModelIdForImport!!, uri)
-        }
-    }
-
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("本地 AI 模型管理", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { showConfigDialog = true }) {
-                        Icon(imageVector = Icons.Default.Settings, contentDescription = "模型設定")
-                    }
-                }
-            )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // General Info Alert
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(imageVector = Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "本 App 使用完全本地化、免網路的 AI 模型。Gemma 與食物辨識皆執行於您的手機晶片，保障個人隱私安全。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
-            }
-
-            // Models Status Section
-            Text(
-                text = "本地端 AI 模型清單",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-
-            models.forEach { model ->
-                val downloadState = downloadStates[model.id] ?: ModelDownloadState.Idle
-                val loadState = when (model.type) {
-                    ModelType.LLM -> gemmaLoadState
-                    ModelType.FOOD_CLASSIFIER -> classifierLoadState
-                    else -> ModelLoadState.NotFound
-                }
-
-                ModelStatusCard(
-                    model = model,
-                    downloadState = downloadState,
-                    loadState = loadState,
-                    onDownloadClick = { viewModel.downloadModel(model.id) },
-                    onLoadClick = { viewModel.loadModel(model) },
-                    onImportClick = {
-                        selectedModelIdForImport = model.id
-                        filePickerLauncher.launch("*/*")
-                    },
-                    isActive = (model.type == ModelType.LLM && loadedModelName == model.name) ||
-                            (model.type == ModelType.FOOD_CLASSIFIER && classifierLoadState is ModelLoadState.Loaded)
-                )
-            }
-        }
-    }
-
-    // Config dialog modal
-    if (showConfigDialog) {
-        ModelConfigDialog(
-            viewModel = viewModel,
-            onDismiss = { showConfigDialog = false }
-        )
-    }
-
-    if (isApplyingModelConfig) {
-        LoadingDialog(
-            title = "套用模型設定",
-            message = "正在重新載入本地 Gemma 模型..."
-        )
-    } else if (isModelLoading) {
-        LoadingDialog(
-            title = "載入模型中",
-            message = "正在切換並載入 AI 模型，請稍候..."
-        )
-    }
-}
+import com.xuan.fitai.data.model.ContextTokenLimits
 
 @Composable
 fun ModelConfigDialog(
@@ -170,7 +33,7 @@ fun ModelConfigDialog(
     val speculativePref by viewModel.enableSpeculative.collectAsState()
     val systemPromptPref by viewModel.systemPrompt.collectAsState()
 
-    var maxTokens by remember { mutableStateOf(maxTokensPref) }
+    var maxTokens by remember(maxTokensPref) { mutableStateOf(maxTokensPref) }
     var topK by remember { mutableStateOf(topKPref) }
     var topP by remember { mutableStateOf(topPPref) }
     var temp by remember { mutableStateOf(tempPref) }
@@ -185,7 +48,7 @@ fun ModelConfigDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Configurations (模型設定)",
+                text = "AI 模型參數",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
@@ -205,25 +68,38 @@ fun ModelConfigDialog(
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
-                        text = { Text("Model configs") }
+                        text = { Text("模型參數") }
                     )
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
-                        text = { Text("System prompt") }
+                        text = { Text("系統提示詞") }
                     )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 if (selectedTab == 0) {
-                    // Max tokens (2000-32000)
                     IntSliderInputRow(
-                        label = "Max tokens (2000-32000)",
-                        description = "限制模型單次輸出的最大字數上限，防止生成內容過長。",
+                        label = "上下文容量（256–32000 tokens）",
+                        description = "模型處理對話的 token 容量，並非中文字數。較小容量可減少記憶體需求，但可容納的對話也較短。",
                         value = maxTokens,
-                        valueRange = 2000..32000,
+                        valueRange = ContextTokenLimits.range,
                         onValueChange = { maxTokens = it }
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ContextTokenLimits.presets.forEach { tokens ->
+                            FilterChip(
+                                selected = maxTokens == tokens,
+                                onClick = { maxTokens = tokens },
+                                label = { Text(tokens.toString()) }
+                            )
+                        }
+                    }
+                    Text(
+                        "可先試 1024；256／512 適合短文字。長對話、圖片或語音可能需要更大容量。儲存後會重新載入模型，速度仍取決於模型與裝置。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     // TopK (5-100)
@@ -325,12 +201,12 @@ fun ModelConfigDialog(
                     onDismiss()
                 }
             ) {
-                Text("OK")
+                Text("儲存並套用")
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text("取消")
             }
         }
     )

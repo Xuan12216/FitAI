@@ -6,6 +6,9 @@ import com.xuan.fitai.util.DateTimeUtil
 import kotlinx.coroutines.flow.Flow
 
 class MealRepository(private val mealDao: MealDao) {
+    fun getMealsBetween(startMillis: Long, endMillis: Long): Flow<List<Meal>> =
+        mealDao.getMealsBetween(startMillis, endMillis)
+
     fun getMealsForDay(timestampMillis: Long): Flow<List<Meal>> {
         val start = DateTimeUtil.getStartOfDay(timestampMillis)
         val end = DateTimeUtil.getEndOfDay(timestampMillis)

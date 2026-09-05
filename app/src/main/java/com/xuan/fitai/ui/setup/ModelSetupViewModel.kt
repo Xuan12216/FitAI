@@ -9,6 +9,8 @@ import com.xuan.fitai.data.model.LocalModelInfo
 import com.xuan.fitai.data.model.ModelDownloadState
 import com.xuan.fitai.data.model.ModelLoadState
 import com.xuan.fitai.data.model.ModelType
+import com.xuan.fitai.data.model.ContextTokenLimits
+import com.xuan.fitai.data.model.AppearanceSettings
 import com.xuan.fitai.data.repository.ModelRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -34,9 +36,16 @@ class ModelSetupViewModel(
     val classifierLoadState = modelManager.classifierHelper.loadState
     val loadedModelName = modelManager.gemmaHelper.loadedModelName
 
+    val appearance: StateFlow<AppearanceSettings?> = userPreferenceStore.appearanceFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun saveAppearance(settings: AppearanceSettings) {
+        viewModelScope.launch { userPreferenceStore.saveAppearance(settings) }
+    }
+
     // Configuration flows
     val maxTokens: StateFlow<Int> = userPreferenceStore.maxTokensFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 4000)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ContextTokenLimits.DEFAULT)
 
     val topK: StateFlow<Int> = userPreferenceStore.topKFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, 64)

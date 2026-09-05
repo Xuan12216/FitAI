@@ -45,6 +45,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -56,7 +58,7 @@ import com.xuan.fitai.ui.onboarding.OnboardingScreen
 import com.xuan.fitai.ui.onboarding.OnboardingViewModel
 import com.xuan.fitai.ui.scanner.FoodScannerScreen
 import com.xuan.fitai.ui.scanner.FoodScannerViewModel
-import com.xuan.fitai.ui.setup.ModelSetupScreen
+import com.xuan.fitai.ui.setup.SettingsScreen
 import com.xuan.fitai.ui.setup.ModelSetupViewModel
 import com.xuan.fitai.ui.workout.WorkoutScreen
 import com.xuan.fitai.ui.workout.WorkoutViewModel
@@ -150,13 +152,16 @@ fun MainNavigation(
                 factory = DashboardViewModel.Factory(
                     app.userRepository,
                     app.mealRepository,
-                    app.gemmaHelper
+                    app.gemmaHelper,
+                    app.reminderRepository
                 )
             )
             DashboardScreen(
                 viewModel = dashboardVm,
                 onNavigateToScanner = { navController.navigate("scanner") },
                 onNavigateToSetup = { navController.navigate("setup") },
+                onNavigateToModelSetup = { navController.navigate("setup?tab=1") },
+                onNavigateToReminders = { navController.navigate("reminders") { launchSingleTop = true } },
                 onResetOnboarding = {
                     coroutineScope.launch {
                         app.userRepository.resetOnboarding()
@@ -199,7 +204,7 @@ fun MainNavigation(
             ChatScreen(
                 viewModel = chatVm,
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToSetup = { navController.navigate("setup") },
+                onNavigateToSetup = { navController.navigate("setup?tab=1") },
                 bottomOverlayPadding = navigationBarHeight,
             )
         }
@@ -222,7 +227,7 @@ fun MainNavigation(
             )
         }
 
-        composable("setup") {
+        composable("setup?tab={tab}", arguments = listOf(navArgument("tab") { type = NavType.IntType; defaultValue = 0 })) { entry ->
             val setupVm: ModelSetupViewModel = viewModel(
                 factory = ModelSetupViewModel.Factory(
                     app.modelRepository,
@@ -230,8 +235,9 @@ fun MainNavigation(
                     app.modelManager
                 )
             )
-            ModelSetupScreen(
+            SettingsScreen(
                 viewModel = setupVm,
+                initialTab = entry.arguments?.getInt("tab") ?: 0,
                 onNavigateBack = { navController.popBackStack() }
             )
         }
@@ -344,7 +350,7 @@ private fun FloatingDestinationToolbar(
         shadowElevation = 0.dp,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 4.dp),
+            modifier = Modifier.padding(7.5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             destinations.forEach { destination ->
@@ -352,6 +358,7 @@ private fun FloatingDestinationToolbar(
                 if (isSelected) {
                     FilledTonalButton(
                         onClick = { onNavigate(destination.route) },
+                        modifier = Modifier.height(40.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp),
                         colors = ButtonDefaults.filledTonalButtonColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
@@ -367,7 +374,7 @@ private fun FloatingDestinationToolbar(
                         Text(destination.label)
                     }
                 } else {
-                    TextButton(onClick = { onNavigate(destination.route) }) {
+                    TextButton(onClick = { onNavigate(destination.route) }, modifier = Modifier.height(40.dp)) {
                         Text(destination.label, color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
