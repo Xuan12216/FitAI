@@ -1,0 +1,10 @@
+
+com.xuan.fitai.AdaptiveLayoutTest:.....
+com.xuan.fitai.AutoBackupSchedulingTest:..
+com.xuan.fitai.RecordIntegrityTest:......
+
+Time: 24.155
+
+OK (13 tests)
+
+

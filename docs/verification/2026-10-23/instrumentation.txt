@@ -1,0 +1,9 @@
+
+com.xuan.fitai.AdaptiveLayoutTest:.....
+com.xuan.fitai.RecordIntegrityTest:......
+
+Time: 9.224
+
+OK (11 tests)
+
+

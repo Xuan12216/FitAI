@@ -1,0 +1,355 @@
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ui/reminders/ReminderScreen.kt:208: Warning: Field requires API level 33 (current min is 31): android.Manifest.permission#POST_NOTIFICATIONS [InlinedApi]
+                        FilterChip(selected = false, onClick = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }, label = { Text("允許") })
+                                                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   Explanation for issues of type "InlinedApi":
+   This check scans through all the Android API field references in the
+   application and flags certain constants, such as static final integers and
+   Strings, which were introduced in later versions. These will actually be
+   copied into the class files rather than being referenced, which means that
+   the value is available even when running on older devices. In some cases
+   that's fine, and in other cases it can result in a runtime crash or
+   incorrect behavior. It depends on the context, so consider the code
+   carefully and decide whether it's safe and can be suppressed or whether the
+   code needs to be guarded.
+
+   If you really want to use this API and don't need to support older devices
+   just set the minSdkVersion in your build.gradle or AndroidManifest.xml
+   files.
+
+   If your code is deliberately accessing newer APIs, and you have ensured
+   (e.g. with conditional execution) that this code will only ever be called
+   on a supported platform, then you can annotate your class or method with
+   the @TargetApi annotation specifying the local minimum SDK to apply, such
+   as @TargetApi(11), such that this check considers 11 rather than your
+   manifest file's minimum SDK as the required API level.
+
+/Users/xuan/AndroidStudioProject/FitAI/app/build.gradle.kts:15: Warning: Not targeting the latest versions of Android; compatibility modes apply. Consider testing and updating this version. Consult the android.os.Build.VERSION_CODES javadoc for details. [OldTargetApi]
+        targetSdk = 36
+        ~~~~~~~~~~~~~~
+
+   Explanation for issues of type "OldTargetApi":
+   When your application or sdk runs on a version of Android that is more
+   recent than your targetSdk specifies that it has been tested with, various
+   compatibility modes kick in. This ensures that your application continues
+   to work, but it may look out of place. For example, if the targetSdk is
+   less than 14, your app may get an option button in the UI.
+
+   To fix this issue, set the targetSdk to the highest available value. Then
+   test your app to make sure everything works correctly. You may want to
+   consult the compatibility notes to see what changes apply to each version
+   you are adding support for:
+   https://developer.android.com/reference/android/os/Build.VERSION_CODES.html
+   as well as follow this guide:
+   https://developer.android.com/distribute/best-practices/develop/target-sdk.
+   html
+
+   https://developer.android.com/distribute/best-practices/develop/target-sdk.html
+
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ui/reminders/ReminderScreen.kt:159: Warning: Use of REQUEST_IGNORE_BATTERY_OPTIMIZATIONS violates the Play Store Content Policy regarding acceptable use cases, as described in https://developer.android.com/training/monitoring-device-state/doze-standby.html [BatteryLife]
+                                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   Explanation for issues of type "BatteryLife":
+   This issue flags code that either
+   * negatively affects battery life, or
+   * uses APIs that have recently changed behavior to prevent background tasks
+   from consuming memory and battery excessively.
+
+   Generally, you should be using WorkManager instead.
+
+   For more details on how to update your code, please see
+   https://developer.android.com/topic/performance/background-optimization
+
+
+/Users/xuan/AndroidStudioProject/FitAI/gradle/libs.versions.toml:3: Warning: A newer version of androidx.core:core-ktx than 1.18.0 is available: 1.19.0 [GradleDependency]
+androidxCore = "1.18.0"
+               ~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/gradle/libs.versions.toml:4: Warning: A newer version of androidx.lifecycle:lifecycle-runtime-compose than 2.10.0 is available: 2.11.0 [GradleDependency]
+androidxLifecycle = "2.10.0"
+                    ~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/gradle/libs.versions.toml:4: Warning: A newer version of androidx.lifecycle:lifecycle-runtime-ktx than 2.10.0 is available: 2.11.0 [GradleDependency]
+androidxLifecycle = "2.10.0"
+                    ~~~~~~~~
+
+   Explanation for issues of type "GradleDependency":
+   This detector looks for usages of libraries where the version you are using
+   is not the current stable release. Using older versions is fine, and there
+   are cases where you deliberately want to stick with an older version.
+   However, you may simply not be aware that a more recent version is
+   available, and that is what this lint check helps find.
+
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/AndroidManifest.xml:28: Warning: The attribute android:allowBackup is deprecated from Android 12 and the default allows backup [DataExtractionRules]
+        android:allowBackup="true"
+                             ~~~~
+
+   Explanation for issues of type "DataExtractionRules":
+   Before Android 12, the attributes android:allowBackup and
+   android:fullBackupContent were used to configure all forms of backup,
+   including cloud backups, device-to-device transfers and adb backup.
+
+   In Android 12 and higher, these attributes have been deprecated and will
+   only apply to cloud backups. You should instead use the attribute
+   android:dataExtractionRules, specifying an @xml resource that configures
+   which files to back up, for cloud backups and for device-to-device
+   transfers, separately. If your minSdkVersion supports older versions,
+   you'll still want to specify an android:fullBackupContent resource if the
+   default behavior is not right for your app.
+
+   https://developer.android.com/about/versions/12/backup-restore#xml-changes
+   https://goo.gle/DataExtractionRules
+
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/MainActivity.kt:37: Warning: Unnecessary; SDK_INT is always >= 31 [ObsoleteSdkInt]
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ai/ModelDownloader.kt:45: Warning: Unnecessary; SDK_INT is always >= 31 [ObsoleteSdkInt]
+            val totalSize = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/notification/ReminderScheduler.kt:48: Warning: Unnecessary; SDK_INT is always >= 31 [ObsoleteSdkInt]
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ui/reminders/ReminderScreen.kt:94: Warning: Unnecessary; SDK_INT is always >= 31 [ObsoleteSdkInt]
+        isExactAlarmPermissionMissing = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ui/reminders/ReminderScreen.kt:186: Warning: Unnecessary; SDK_INT is always >= 31 [ObsoleteSdkInt]
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/theme/Theme.kt:83: Warning: Unnecessary; SDK_INT is always >= 31 [ObsoleteSdkInt]
+      dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/res/mipmap-anydpi-v26: Warning: This folder configuration (v26) is unnecessary; minSdkVersion is 31. Merge all the resources in this folder into mipmap-anydpi. [ObsoleteSdkInt]
+
+   Explanation for issues of type "ObsoleteSdkInt":
+   This check flags version checks that are not necessary, because the
+   minSdkVersion (or surrounding known API level) is already at least as high
+   as the version checked for.
+
+   Similarly, it also looks for resources in -vNN folders, such as values-v14
+   where the version qualifier is less than or equal to the minSdkVersion,
+   where the contents should be merged into the best folder.
+
+/Users/xuan/AndroidStudioProject/FitAI/app/build.gradle.kts:99: Warning: This library supports using KSP instead of kapt, which greatly improves performance. Learn more: https://developer.android.com/studio/build/migrate-to-ksp [KaptUsageInsteadOfKsp]
+  kapt(libs.androidx.room.compiler)
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   Explanation for issues of type "KaptUsageInsteadOfKsp":
+   KSP is a more efficient replacement for kapt. For libraries that support
+   both, KSP should be used to improve build times.
+
+   https://developer.android.com/studio/build/migrate-to-ksp
+
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ui/chat/ChatScreen.kt:862: Hint: Prefer mutableFloatStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var scale by remember { mutableStateOf(1f) }
+                            ~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ui/setup/ModelConfigDialog.kt:37: Hint: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var maxTokens by remember(maxTokensPref) { mutableStateOf(maxTokensPref) }
+                                               ~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ui/setup/ModelConfigDialog.kt:38: Hint: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var topK by remember { mutableStateOf(topKPref) }
+                           ~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ui/setup/ModelConfigDialog.kt:39: Hint: Prefer mutableFloatStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var topP by remember { mutableStateOf(topPPref) }
+                           ~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ui/setup/ModelConfigDialog.kt:40: Hint: Prefer mutableFloatStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var temp by remember { mutableStateOf(tempPref) }
+                           ~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ui/setup/ModelConfigDialog.kt:46: Hint: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var selectedTab by remember { mutableStateOf(0) }
+                                  ~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ui/workout/WorkoutScreen.kt:293: Hint: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+        var daysPerWeek by rememberSaveable { mutableStateOf(3) }
+                                              ~~~~~~~~~~~~~~
+
+   Explanation for issues of type "AutoboxingStateCreation":
+   Calling mutableStateOf<T>() when T is either backed by a primitive type on
+   the JVM or is a value class results in a state implementation that requires
+   all state values to be boxed. This usually causes an additional allocation
+   for each state write, and adds some additional work to auto-unbox values
+   when reading the value of the state. Instead, prefer to use a specialized
+   primitive state implementation for Int, Long, Float, and Double when the
+   state does not need to track null values and does not override the default
+   SnapshotMutationPolicy. See mutableIntStateOf(), mutableLongStateOf(),
+   mutableFloatStateOf(), and mutableDoubleStateOf() for more information.
+
+   Vendor: Jetpack Compose
+   Identifier: androidx.compose.runtime
+   Feedback: https://issuetracker.google.com/issues/new?component=612128
+
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/res/xml/backup_rules.xml:8: Warning: The resource R.xml.backup_rules appears to be unused [UnusedResources]
+<full-backup-content>
+^
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/res/xml/data_extraction_rules.xml:6: Warning: The resource R.xml.data_extraction_rules appears to be unused [UnusedResources]
+<data-extraction-rules>
+^
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/res/drawable/ic_launcher_foreground.xml:1: Warning: The resource R.drawable.ic_launcher_foreground appears to be unused [UnusedResources]
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+^
+
+   Explanation for issues of type "UnusedResources":
+   Unused resources make applications larger and slow down builds.
+
+
+   The unused resource check can ignore tests. If you want to include
+   resources that are only referenced from tests, consider packaging them in a
+   test source set instead.
+
+   You can include test sources in the unused resource check by setting the
+   system property lint.unused-resources.include-tests =true, and to exclude
+   them (usually for performance reasons), use
+   lint.unused-resources.exclude-tests =true.
+   ,
+
+   Available options:
+
+   **skip-libraries** (default is true):
+   Whether the unused resource check should skip reporting unused resources in libraries.
+
+   Many libraries will declare resources that are part of the library surface; other modules depending on the library will also reference the resources. To avoid reporting all these resources as unused (in the context of a library), the unused resource check normally skips reporting unused resources in libraries. Instead, run the unused resource check on the consuming app module (along with `checkDependencies=true`).
+
+   However, there are cases where you want to check that all the resources declared in a library are used; in that case, you can disable the skip option.
+
+   To configure this option, use a `lint.xml` file with an <option> like this:
+
+   ```xml
+   <lint>
+       <issue id="UnusedResources">
+           <option name="skip-libraries" value="true" />
+       </issue>
+   </lint>
+   ```
+
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/Navigation.kt:518: Warning: State backed values should use the lambda overload of Modifier.offset [UseOfNonLambdaOffsetOverload from androidx.compose.foundation]
+                    .offset(x = animatedCapsuleOffset)
+                     ~~~~~~
+
+   Explanation for issues of type "UseOfNonLambdaOffsetOverload":
+   Modifier.offset() is recommended to be used with static arguments only to
+   avoid unnecessary recompositions. Modifier.offset{ } is preferred in the
+   cases where the arguments are backed by a State.
+
+   Vendor: Jetpack Compose
+   Identifier: androidx.compose.foundation
+   Feedback: https://issuetracker.google.com/issues/new?component=612128
+
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ui/chat/ChatScreen.kt:928: Warning: Use the KTX extension function Bitmap.scale instead? [UseKtx]
+    return Bitmap.createScaledBitmap(
+           ^
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ai/FoodClassifierHelperImpl.kt:100: Warning: Use the KTX extension function Bitmap.scale instead? [UseKtx]
+            val resizedBitmap = Bitmap.createScaledBitmap(bitmap, inputWidth, inputHeight, true)
+                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ui/reminders/ReminderScreen.kt:160: Warning: Use the KTX extension function String.toUri instead? [UseKtx]
+                                        data = Uri.parse("package:${context.packageName}")
+                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ui/reminders/ReminderScreen.kt:160: Warning: Use the KTX extension function String.toUri instead? [UseKtx]
+                                        data = Uri.parse("package:${context.packageName}")
+                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ui/reminders/ReminderScreen.kt:188: Warning: Use the KTX extension function String.toUri instead? [UseKtx]
+                                        data = Uri.parse("package:${context.packageName}")
+                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ui/reminders/ReminderScreen.kt:188: Warning: Use the KTX extension function String.toUri instead? [UseKtx]
+                                        data = Uri.parse("package:${context.packageName}")
+                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ui/workout/WorkoutScreen.kt:227: Warning: Use the KTX extension function String.toUri instead? [UseKtx]
+                                        data = Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata")
+                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ui/workout/WorkoutScreen.kt:227: Warning: Use the KTX extension function String.toUri instead? [UseKtx]
+                                        data = Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata")
+                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/src/main/java/com/xuan/fitai/ui/workout/WorkoutScreen.kt:233: Warning: Use the KTX extension function String.toUri instead? [UseKtx]
+                                        val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata"))
+                                                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   Explanation for issues of type "UseKtx":
+   The Android KTX libraries decorates the Android platform SDK as well as
+   various libraries with more convenient extension functions available from
+   Kotlin, allowing you to use default parameters, named parameters, and
+   more.
+
+   Available options:
+
+   **remove-defaults** (default is true):
+   Whether to skip arguments that match the defaults provided by the extension.
+
+   Extensions often provide default values for some of the parameters. For example:
+   ```kotlin
+   fun Path.readLines(charset: Charset = Charsets.UTF_8): List<String> { return Files.readAllLines(this, charset) }
+   ```
+   This lint check will by default automatically omit parameters that match the default, so if your code was calling
+
+   ```kotlin
+   Files.readAllLines(file, Charset.UTF_8)
+   ```
+   lint would replace this with
+   ```kotlin
+   file.readLines()
+   ```
+   rather than
+
+   ```kotlin
+   file.readLines(Charset.UTF_8
+   ```
+   You can turn this behavior off using this option.
+
+   To configure this option, use a `lint.xml` file with an <option> like this:
+
+   ```xml
+   <lint>
+       <issue id="UseKtx">
+           <option name="remove-defaults" value="true" />
+       </issue>
+   </lint>
+   ```
+
+   **require-present** (default is true):
+   Whether to only offer extensions already available.
+
+   This option lets you only have lint suggest extension replacements if those extensions are already available on the class path (in other words, you're already depending on the library containing the extension method.)
+
+   To configure this option, use a `lint.xml` file with an <option> like this:
+
+   ```xml
+   <lint>
+       <issue id="UseKtx">
+           <option name="require-present" value="true" />
+       </issue>
+   </lint>
+   ```
+
+/Users/xuan/AndroidStudioProject/FitAI/app/build.gradle.kts:72: Warning: Use version catalog instead [UseTomlInstead]
+  implementation("dev.chrisbanes.haze:haze:1.7.2")
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/build.gradle.kts:73: Warning: Use version catalog instead [UseTomlInstead]
+  implementation("androidx.compose.material:material-icons-core")
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/build.gradle.kts:74: Warning: Use version catalog instead [UseTomlInstead]
+  implementation("androidx.compose.material:material-icons-extended")
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/build.gradle.kts:91: Warning: Use version catalog instead [UseTomlInstead]
+  implementation("androidx.window:window:1.5.0")
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/build.gradle.kts:114: Warning: Use version catalog instead [UseTomlInstead]
+  implementation("androidx.health.connect:connect-client:1.1.0-alpha11")
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/build.gradle.kts:117: Warning: Use version catalog instead [UseTomlInstead]
+  implementation("androidx.graphics:graphics-path:1.1.0")
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/build.gradle.kts:118: Warning: Use version catalog instead [UseTomlInstead]
+  implementation("com.google.ai.edge.litert:litert:1.4.2")
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/build.gradle.kts:119: Warning: Use version catalog instead [UseTomlInstead]
+  implementation("com.google.ai.edge.litert:litert-gpu:1.4.2")
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/build.gradle.kts:120: Warning: Use version catalog instead [UseTomlInstead]
+  implementation("com.google.ai.edge.litert:litert-gpu-api:1.4.2")
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/xuan/AndroidStudioProject/FitAI/app/build.gradle.kts:126: Warning: Use version catalog instead [UseTomlInstead]
+  implementation("com.google.guava:guava:33.2.1-android")
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   Explanation for issues of type "UseTomlInstead":
+   If your project is using a libs.versions.toml file, you should place all
+   Gradle dependencies in the TOML file. This lint check looks for version
+   declarations outside of the TOML file and suggests moving them (and in the
+   IDE, provides a quickfix to performing the operation automatically).
+
+0 errors, 38 warnings, 7 hints
