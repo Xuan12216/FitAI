@@ -7,6 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Tune
@@ -36,12 +37,12 @@ fun SettingsScreen(viewModel: ModelSetupViewModel, onNavigateBack: () -> Unit, i
     val applying by viewModel.isApplyingModelConfig.collectAsStateWithLifecycle()
     val appearance by viewModel.appearance.collectAsStateWithLifecycle()
     val contextTokens by viewModel.maxTokens.collectAsStateWithLifecycle()
-    val loading = gemmaLoadState is ModelLoadState.Loading || classifierLoadState is ModelLoadState.Loading
-    var selectedTab by rememberSaveable { mutableIntStateOf(initialTab.coerceIn(0, 1)) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(initialTab.coerceIn(0, 2)) }
     var selectedImportId by rememberSaveable { mutableStateOf<String?>(null) }
     var showConfig by rememberSaveable { mutableStateOf(false) }
     val appearanceScroll = rememberScrollState()
     val modelsScroll = rememberScrollState()
+    val backupScroll = rememberScrollState()
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         val modelId = selectedImportId
         if (uri != null && modelId != null) viewModel.importLocalFile(modelId, uri)
@@ -56,29 +57,37 @@ fun SettingsScreen(viewModel: ModelSetupViewModel, onNavigateBack: () -> Unit, i
                 }
             )
             SecondaryTabRow(selectedTabIndex = selectedTab, containerColor = MaterialTheme.colorScheme.background) {
-                listOf("外觀" to Icons.Default.Palette, "AI 模型" to Icons.Default.SmartToy).forEachIndexed { index, (label, icon) ->
-                    Tab(selected = selectedTab == index, onClick = { selectedTab = index }, text = {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(icon, null, Modifier.size(20.dp))
-                            Text(label)
-                        }
-                    })
+                listOf("外觀" to Icons.Default.Palette, "AI 模型" to Icons.Default.SmartToy, "備份" to Icons.Default.CloudUpload).forEachIndexed { index, (label, icon) ->
+                    val compact = com.xuan.fitai.ui.adaptive.LocalAdaptiveInfo.current.width < 600.dp
+                    Tab(selected = selectedTab == index, onClick = { selectedTab = index },
+                        icon = if (compact) ({ Icon(icon, null, Modifier.size(20.dp)) }) else null,
+                        text = {
+                            if (compact) Text(label)
+                            else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(icon, null, Modifier.size(20.dp)); Text(label)
+                            }
+                        })
                 }
             }
         }
     }) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding)
-                .verticalScroll(if (selectedTab == 0) appearanceScroll else modelsScroll)
+                .verticalScroll(when (selectedTab) { 0 -> appearanceScroll; 1 -> modelsScroll; else -> backupScroll })
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             SettingsPageHeading(
-                title = if (selectedTab == 0) "打造你的 FitAI" else "管理本地 AI",
-                description = if (selectedTab == 0) "選擇喜歡的色彩，讓每一天更有自己的風格。" else "調整對話容量，選擇適合裝置的模型。"
+                title = when (selectedTab) { 0 -> "打造你的 FitAI"; 1 -> "管理本地 AI"; else -> "備份與還原專區" },
+                description = when (selectedTab) { 0 -> "選擇喜歡的色彩，讓每一天更有自己的風格。"; 1 -> "調整對話容量，選擇適合裝置的模型。"; else -> "管理 Google Drive 自動備份與紀錄還原。" }
             )
-            if (selectedTab == 0) {
-                appearance?.let { AppearanceSettingsCard(it, viewModel::saveAppearance) }
+            if (selectedTab == 2) {
+                BackupSettingsCard()
+            } else if (selectedTab == 0) {
+                appearance?.let {
+                    FontSizeSettingsCard(it, viewModel::saveAppearance)
+                    AppearanceSettingsCard(it, viewModel::saveAppearance)
+                }
             } else {
                 SettingsCard {
                     Text("模型參數", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -125,9 +134,9 @@ fun SettingsScreen(viewModel: ModelSetupViewModel, onNavigateBack: () -> Unit, i
         }
     }
     if (showConfig) ModelConfigDialog(viewModel) { showConfig = false }
-    if (applying || loading) LoadingDialog(
-        title = if (applying) "套用模型設定" else "載入模型中",
-        message = if (applying) "正在以新的參數重新載入模型…" else "正在準備本地 AI，請稍候…"
+    if (applying) LoadingDialog(
+        title = "套用模型設定",
+        message = "正在以新的參數重新載入模型…"
     )
 }
 

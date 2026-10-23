@@ -3,6 +3,10 @@ package com.xuan.fitai.ui.dashboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.xuan.fitai.data.model.AdviceCache
+import com.xuan.fitai.data.local.ProgressDao
+import com.xuan.fitai.ai.DashboardAdviceContent
+import com.xuan.fitai.ai.DashboardAdviceParser
 import com.xuan.fitai.ai.GemmaLocalHelper
 import com.xuan.fitai.ai.GemmaOutputParser
 import com.xuan.fitai.data.model.Meal
@@ -27,11 +31,36 @@ class DashboardViewModel(
     private val userRepository: UserRepository,
     private val mealRepository: MealRepository,
     private val gemmaHelper: GemmaLocalHelper,
-    private val reminderRepository: ReminderRepository
+    private val reminderRepository: ReminderRepository,
+    private val progressDao: ProgressDao,
+    private val foodAssessment: com.xuan.fitai.nutrition.FoodAssessment
 ) : ViewModel() {
 
     val userProfile: StateFlow<UserProfile> = userRepository.userProfile
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UserProfile())
+
+    val mealHistory = mealRepository.allMeals.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val selectedDate = MutableStateFlow(LocalDate.now())
+    private var followToday = true
+    val mealDate = selectedDate.asStateFlow()
+    val selectedMeals = combine(mealHistory, selectedDate) { meals, date ->
+        meals.filter { java.time.Instant.ofEpochMilli(it.timestamp).atZone(ZoneId.systemDefault()).toLocalDate() == date }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    fun selectMealDate(date: LocalDate) { selectedDate.value = date; followToday = date == LocalDate.now() }
+    val weights = progressDao.weights().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    suspend fun saveWeight(entry: com.xuan.fitai.data.model.WeightEntry) = progressDao.saveWeight(entry)
+    suspend fun deleteWeight(date: String) = progressDao.deleteWeight(date)
+    suspend fun applyWeight(weight: Float) { userRepository.saveUserProfile(userRepository.userProfile.first().copy(weight = weight)) }
+    suspend fun saveMealRecord(original: Meal?, copy: Boolean, name: String, portion: String, type: String,
+        favorite: Boolean, timestamp: Long, cal: Float, protein: Float, carbs: Float, fat: Float,
+        aiEstimated: Boolean, aiAdvice: String?, referenceJson: String?) {
+        require(name.isNotBlank() && portion.isNotBlank())
+        require(listOf(cal, protein, carbs, fat).all { it.isFinite() && it >= 0 })
+        val record = Meal(id = if (copy) 0 else original?.id ?: 0, name = name.trim(), portionSize = portion.trim(),
+            mealType = type, isFavorite = favorite, timestamp = timestamp, calories = cal, protein = protein, carbs = carbs, fat = fat,
+            isAiEstimated = aiEstimated, aiAdvice = aiAdvice, nutritionReferenceJson = referenceJson)
+        if (record.id == 0) mealRepository.insertMeal(record) else check(mealRepository.updateMeal(record) == 1) { "這筆餐點已不存在，請重新新增" }
+    }
 
     val today = currentDateFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LocalDate.now())
@@ -60,7 +89,12 @@ class DashboardViewModel(
     suspend fun changeWater(amountMl: Int, date: LocalDate) = reminderRepository.changeWater(amountMl, date)
 
     private val _aiAdvice = MutableStateFlow("正在為您產生今日本地 AI 健康建議...")
-    val aiAdvice: StateFlow<String> = _aiAdvice.asStateFlow()
+    val dailyAdvice: StateFlow<DashboardAdviceContent> = _aiAdvice
+        .map(DashboardAdviceParser::parse)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardAdviceContent())
+
+    private val _adviceUpdatedAt = MutableStateFlow<Long?>(null)
+    val adviceUpdatedAt = _adviceUpdatedAt.asStateFlow()
 
     private val _isAiAdviceGenerating = MutableStateFlow(false)
     val isAiAdviceGenerating: StateFlow<Boolean> = _isAiAdviceGenerating.asStateFlow()
@@ -69,13 +103,15 @@ class DashboardViewModel(
     private var lastGeneratedAdviceSignature: String? = null
     private val refreshVersion = MutableStateFlow(0)
 
+    val modelLoadState = gemmaHelper.loadState
     val loadedModelName: StateFlow<String?> = gemmaHelper.loadedModelName
 
     private data class DashboardAdviceInput(
         val profile: UserProfile,
         val meals: List<Meal>,
         val loadState: ModelLoadState,
-        val isActive: Boolean
+        val isActive: Boolean,
+        val date: LocalDate
     )
 
     private data class DashboardAdviceRequest(
@@ -88,10 +124,12 @@ class DashboardViewModel(
     )
 
     init {
+        viewModelScope.launch { currentDateFlow().collect { if (followToday) selectedDate.value = it } }
         // Automatically generate advice when profile, meals, or AI load state updates
         viewModelScope.launch {
-            combine(userProfile, todayMeals, gemmaHelper.loadState, dashboardActive, refreshVersion) { profile, meals, loadState, isActive, version ->
-                val input = DashboardAdviceInput(profile, meals, loadState, isActive)
+            combine(userProfile, combine(todayMeals, today) { meals, date -> meals to date }, gemmaHelper.loadState, dashboardActive, refreshVersion) { profile, datedMeals, loadState, isActive, version ->
+                val meals = datedMeals.first
+                val input = DashboardAdviceInput(profile, meals, loadState, isActive, datedMeals.second)
                 val request = DashboardAdviceRequest(
                     profile = profile,
                     meals = meals,
@@ -133,6 +171,7 @@ class DashboardViewModel(
             "${it.id}:${it.name}:${it.calories}:${it.protein}:${it.carbs}:${it.fat}:${it.timestamp}"
         }
         return listOf(
+            date,
             profile.goal,
             profile.targetCalories,
             profile.targetProteinGrams,
@@ -192,10 +231,24 @@ class DashboardViewModel(
         )
 
         try {
+            val cacheKey = "${LocalDate.now()}|$contentSignature"
+            val cached = if (refreshVersion.value == 0) progressDao.advice(cacheKey) else null
+            if (cached != null) {
+                _aiAdvice.value = cached.rawText
+                _adviceUpdatedAt.value = cached.updatedAt
+                lastGeneratedAdviceSignature = contentSignature
+                return
+            }
             _isAiAdviceGenerating.value = true
             _aiAdvice.value = ""
+            _adviceUpdatedAt.value = null
             android.util.Log.d("FitAI_VM", "generateDailyAdvice: calling generateReplyFlow")
             collectAdviceWithOneRetry(prompt)
+            if (_aiAdvice.value.isNotBlank()) {
+                val updatedAt = System.currentTimeMillis()
+                progressDao.saveAdvice(AdviceCache(cacheKey, _aiAdvice.value, updatedAt))
+                _adviceUpdatedAt.value = updatedAt
+            }
             lastGeneratedAdviceSignature = contentSignature
         } catch (e: CancellationException) {
             android.util.Log.d("FitAI_VM", "generateDailyAdvice cancelled")
@@ -257,13 +310,8 @@ class DashboardViewModel(
         }
     }
 
-    fun askAiForMealSuggestion(foodName: String): Flow<String> {
-        if (gemmaHelper.loadState.value != ModelLoadState.Loaded) {
-            return flow { throw IllegalStateException("Gemma model is not loaded") }
-        }
-        val goal = userProfile.value.goal
-        return gemmaHelper.analyzeFoodFlow(foodName, "1份", goal)
-    }
+    fun askAiForMealSuggestion(foodName: String, portion: String, useReference: Boolean) =
+        foodAssessment.analyze(foodName, portion, userProfile.value.goal, useReference)
 
     fun addManualMeal(name: String, cal: Float, p: Float, c: Float, f: Float) {
         viewModelScope.launch {
@@ -284,12 +332,14 @@ class DashboardViewModel(
         private val userRepository: UserRepository,
         private val mealRepository: MealRepository,
         private val gemmaHelper: GemmaLocalHelper,
-        private val reminderRepository: ReminderRepository
+        private val reminderRepository: ReminderRepository,
+        private val progressDao: ProgressDao,
+        private val foodAssessment: com.xuan.fitai.nutrition.FoodAssessment
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(DashboardViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return DashboardViewModel(userRepository, mealRepository, gemmaHelper, reminderRepository) as T
+                return DashboardViewModel(userRepository, mealRepository, gemmaHelper, reminderRepository, progressDao, foodAssessment) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

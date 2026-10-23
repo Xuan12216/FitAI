@@ -6,6 +6,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -40,14 +41,19 @@ fun OnboardingScreen(
         return
     }
 
-    var ageText by remember(profile.age) { mutableStateOf(profile.age.toString()) }
-    var heightText by remember(profile.height) {
+    var ageText by rememberSaveable(profile.age) { mutableStateOf(profile.age.toString()) }
+    var heightText by rememberSaveable(profile.height) {
         mutableStateOf(if (profile.height % 1f == 0f) profile.height.toInt().toString() else profile.height.toString())
     }
-    var weightText by remember(profile.weight) {
+    var weightText by rememberSaveable(profile.weight) {
         mutableStateOf(if (profile.weight % 1f == 0f) profile.weight.toInt().toString() else profile.weight.toString())
     }
 
+    val validProfile = ageText.toIntOrNull()?.let { it in 1..120 } == true &&
+        heightText.toFloatOrNull()?.let { it.isFinite() && it in 50f..300f } == true &&
+        weightText.toFloatOrNull()?.let { it.isFinite() && it in 10f..1000f } == true
+    val saving by viewModel.saving.collectAsState()
+    val saveError by viewModel.error.collectAsState()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -231,8 +237,21 @@ fun OnboardingScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("營養目標即時預覽", style = MaterialTheme.typography.titleMedium)
+                    if (validProfile) Text("BMI ${"%.1f".format(profile.weight / ((profile.height / 100f) * (profile.height / 100f)))}")
+                    Text("BMR ${profile.bmr.toInt()} · TDEE ${profile.tdee.toInt()} kcal")
+                    Text("每日目標 ${profile.targetCalories.toInt()} kcal")
+                    Text("蛋白質 ${profile.targetProteinGrams.toInt()}g · 碳水 ${profile.targetCarbsGrams.toInt()}g · 脂肪 ${profile.targetFatGrams.toInt()}g")
+                    Text("儲存後才會更新，這是依目前資料計算的估計值。", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            if (!validProfile) Text("請填寫有效的年齡、身高與體重", color = MaterialTheme.colorScheme.error)
+            saveError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             // Save Button
             Button(
+                enabled = validProfile && !saving,
                 onClick = {
                     viewModel.saveProfile {
                         onNavigateToDashboard()

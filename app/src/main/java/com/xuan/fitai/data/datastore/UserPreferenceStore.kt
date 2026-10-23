@@ -8,6 +8,7 @@ import com.xuan.fitai.data.model.UserProfile
 import com.xuan.fitai.data.model.MealReminder
 import com.xuan.fitai.data.model.ReminderSettings
 import com.xuan.fitai.data.model.ContextTokenLimits
+import com.xuan.fitai.data.model.normalizedFontScale
 import com.xuan.fitai.data.model.AppearanceSettings
 import com.xuan.fitai.data.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
@@ -25,6 +26,7 @@ class UserPreferenceStore(private val dataStore: DataStore<Preferences>) {
         private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
         private val KEY_CUSTOM_HUE = intPreferencesKey("custom_theme_hue")
         private val KEY_CUSTOM_SATURATION = floatPreferencesKey("custom_theme_saturation")
+        private val KEY_FONT_SCALE = floatPreferencesKey("font_scale")
         private val KEY_CUSTOM_HEX = stringPreferencesKey("custom_primary_hex")
         val KEY_USER_GOAL = stringPreferencesKey("user_goal")
         val KEY_GENDER = stringPreferencesKey("gender")
@@ -42,6 +44,7 @@ class UserPreferenceStore(private val dataStore: DataStore<Preferences>) {
 
         // Local AI model configuration keys
         val KEY_MAX_TOKENS = intPreferencesKey("max_tokens")
+        private val KEY_TOKEN_MIGRATED_V2 = booleanPreferencesKey("token_migrated_v2")
         val KEY_TOP_K = intPreferencesKey("top_k")
         val KEY_TOP_P = floatPreferencesKey("top_p")
         val KEY_TEMPERATURE = floatPreferencesKey("temperature")
@@ -56,6 +59,7 @@ class UserPreferenceStore(private val dataStore: DataStore<Preferences>) {
         val KEY_MEAL_REMINDERS = stringPreferencesKey("meal_reminders")
         val KEY_WATER_REMINDERS_ENABLED = booleanPreferencesKey("water_reminders_enabled")
         val KEY_WATER_TARGET_ML = intPreferencesKey("water_target_ml")
+        val KEY_WATER_SERVING_ML = intPreferencesKey("water_serving_ml")
         val KEY_WATER_INTERVAL_MINUTES = intPreferencesKey("water_interval_minutes")
         val KEY_WATER_START_HOUR = intPreferencesKey("water_start_hour")
         val KEY_WATER_END_HOUR = intPreferencesKey("water_end_hour")
@@ -85,6 +89,7 @@ class UserPreferenceStore(private val dataStore: DataStore<Preferences>) {
             customHue = preferences[KEY_CUSTOM_HUE]?.coerceIn(0, 359),
             customSaturation = preferences[KEY_CUSTOM_SATURATION]?.coerceIn(0.1f, 1.0f),
             customHex = preferences[KEY_CUSTOM_HEX],
+            fontScale = normalizedFontScale(preferences[KEY_FONT_SCALE] ?: 1f),
         )
     }
 
@@ -92,6 +97,7 @@ class UserPreferenceStore(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { preferences ->
             preferences[KEY_WALLPAPER_COLORS] = settings.useWallpaperColors
             preferences[KEY_THEME_MODE] = settings.themeMode.name
+            preferences[KEY_FONT_SCALE] = normalizedFontScale(settings.fontScale)
             if (settings.customHue == null) preferences.remove(KEY_CUSTOM_HUE)
             else preferences[KEY_CUSTOM_HUE] = settings.customHue.coerceIn(0, 359)
             if (settings.customSaturation == null) preferences.remove(KEY_CUSTOM_SATURATION)
@@ -165,7 +171,14 @@ class UserPreferenceStore(private val dataStore: DataStore<Preferences>) {
 
     // Config flows
     val maxTokensFlow: Flow<Int> = dataStore.data.map { preferences ->
-        (preferences[KEY_MAX_TOKENS] ?: ContextTokenLimits.DEFAULT).coerceIn(ContextTokenLimits.range)
+        val stored = preferences[KEY_MAX_TOKENS]
+        val isMigrated = preferences[KEY_TOKEN_MIGRATED_V2] ?: false
+        val tokens = if (!isMigrated && (stored == null || stored <= 2048)) {
+            ContextTokenLimits.DEFAULT
+        } else {
+            stored ?: ContextTokenLimits.DEFAULT
+        }
+        tokens.coerceIn(ContextTokenLimits.range)
     }
     val topKFlow: Flow<Int> = dataStore.data.map { preferences ->
         preferences[KEY_TOP_K] ?: 64
@@ -174,7 +187,7 @@ class UserPreferenceStore(private val dataStore: DataStore<Preferences>) {
         preferences[KEY_TOP_P] ?: 0.95f
     }
     val temperatureFlow: Flow<Float> = dataStore.data.map { preferences ->
-        preferences[KEY_TEMPERATURE] ?: 1.0f
+        preferences[KEY_TEMPERATURE] ?: 0.85f
     }
     val useGpuFlow: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[KEY_USE_GPU] ?: true
@@ -203,6 +216,7 @@ class UserPreferenceStore(private val dataStore: DataStore<Preferences>) {
             meals = decodeMeals(preferences[KEY_MEAL_REMINDERS]),
             waterRemindersEnabled = preferences[KEY_WATER_REMINDERS_ENABLED] ?: false,
             waterTargetMl = preferences[KEY_WATER_TARGET_ML] ?: 2000,
+            waterServingMl = preferences[KEY_WATER_SERVING_ML] ?: 250,
             waterIntervalMinutes = preferences[KEY_WATER_INTERVAL_MINUTES] ?: 60,
             waterStartHour = preferences[KEY_WATER_START_HOUR] ?: 8,
             waterEndHour = preferences[KEY_WATER_END_HOUR] ?: 22,
@@ -231,6 +245,7 @@ class UserPreferenceStore(private val dataStore: DataStore<Preferences>) {
             }
             preferences[KEY_WATER_REMINDERS_ENABLED] = settings.waterRemindersEnabled
             preferences[KEY_WATER_TARGET_ML] = settings.waterTargetMl
+            preferences[KEY_WATER_SERVING_ML] = settings.waterServingMl
             preferences[KEY_WATER_INTERVAL_MINUTES] = settings.waterIntervalMinutes
             preferences[KEY_WATER_START_HOUR] = settings.waterStartHour
             preferences[KEY_WATER_END_HOUR] = settings.waterEndHour
@@ -324,6 +339,7 @@ class UserPreferenceStore(private val dataStore: DataStore<Preferences>) {
         systemPrompt: String
     ) {
         dataStore.edit { preferences ->
+            preferences[KEY_TOKEN_MIGRATED_V2] = true
             preferences[KEY_MAX_TOKENS] = maxTokens.coerceIn(ContextTokenLimits.range)
             preferences[KEY_TOP_K] = topK
             preferences[KEY_TOP_P] = topP

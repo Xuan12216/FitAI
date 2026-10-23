@@ -1,6 +1,10 @@
 package com.xuan.fitai.ui.dashboard
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListScope
+import com.xuan.fitai.ui.adaptive.AdaptivePanes
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -11,11 +15,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.xuan.fitai.data.model.ModelLoadState
 import com.xuan.fitai.data.model.Meal
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -33,21 +37,33 @@ fun DashboardScreen(
     onNavigateToModelSetup: () -> Unit,
     onNavigateToReminders: () -> Unit,
     onNavigateToProfile: () -> Unit,
+    onAskAdvice: (String) -> Unit,
     bottomContentPadding: Dp = 0.dp,
 ) {
     val profile by viewModel.userProfile.collectAsStateWithLifecycle()
     val meals by viewModel.todayMeals.collectAsStateWithLifecycle()
-    val advice by viewModel.aiAdvice.collectAsStateWithLifecycle()
+    val history by viewModel.mealHistory.collectAsStateWithLifecycle()
+    val selectedMeals by viewModel.selectedMeals.collectAsStateWithLifecycle()
+    val mealDate by viewModel.mealDate.collectAsStateWithLifecycle()
+    val advice by viewModel.dailyAdvice.collectAsStateWithLifecycle()
+    val adviceUpdatedAt by viewModel.adviceUpdatedAt.collectAsStateWithLifecycle()
     val generating by viewModel.isAiAdviceGenerating.collectAsStateWithLifecycle()
     val modelName by viewModel.loadedModelName.collectAsStateWithLifecycle()
+    val modelLoadState by viewModel.modelLoadState.collectAsStateWithLifecycle()
     val water by viewModel.waterSettings.collectAsStateWithLifecycle()
+    val weights by viewModel.weights.collectAsStateWithLifecycle()
+    var showDatePicker by rememberSaveable { mutableStateOf(false) }
+    var showWeight by rememberSaveable { mutableStateOf(false) }
     val week by viewModel.weekSummary.collectAsStateWithLifecycle()
     val today by viewModel.today.collectAsStateWithLifecycle()
+    val compactScroll = rememberLazyListState()
+    val historyScroll = rememberLazyListState()
+    val adaptive = com.xuan.fitai.ui.adaptive.LocalAdaptiveInfo.current
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
     var showManualAdd by rememberSaveable { mutableStateOf(false) }
-    var showScannerSetup by rememberSaveable { mutableStateOf(false) }
+    var editorId by rememberSaveable { mutableIntStateOf(0) }
+    var copyMeal by rememberSaveable { mutableStateOf(false) }
     var waterBusy by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<Meal?>(null) }
 
@@ -80,30 +96,28 @@ fun DashboardScreen(
             }
         }
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = padding.calculateTopPadding() + 8.dp, bottom = 24.dp + bottomContentPadding),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(today.format(DateTimeFormatter.ofPattern("M 月 d 日 EEEE", Locale.TRADITIONAL_CHINESE)),
-                        style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("照顧自己，從今天開始", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("今日目標 · ${profile.goal}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        fun LazyListScope.summaryItems() {
+            if (modelLoadState != ModelLoadState.Loaded) {
+                item(key = "model-status") {
+                    ModelStatusBanner(modelLoadState, modelName, onNavigateToModelSetup)
                 }
             }
-            item { CalorieOverview(profile, meals.sumOf { it.calories.toDouble() }.toFloat()) }
-            item {
+            item(key = "today-header") {
+                Text(
+                    "${today.format(DateTimeFormatter.ofPattern("M/d EEEE", Locale.TRADITIONAL_CHINESE))}  ·  目標：${profile.goal}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            item(key = "record-actions") {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { showManualAdd = true }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
+                    Button(onClick = { editorId = 0; copyMeal = false; showManualAdd = true }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
                         Icon(Icons.Default.Add, null, Modifier.size(20.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("記錄一餐")
                     }
                     OutlinedButton(onClick = {
-                        val file = java.io.File(context.filesDir, "models/food_classifier.tflite")
-                        if (file.exists() && file.length() > 0) onNavigateToScanner() else showScannerSetup = true
+                        onNavigateToScanner()
                     }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
                         Icon(Icons.Default.PhotoCamera, null, Modifier.size(20.dp))
                         Spacer(Modifier.width(6.dp))
@@ -111,9 +125,12 @@ fun DashboardScreen(
                     }
                 }
             }
-            item { NutritionOverview(profile, meals) }
-            item {
-                WaterOverview(water.waterConsumedMl, water.waterTargetMl, waterBusy, onAdd = { amount ->
+            item(key = "daily-advice") { DailyAdviceCard(advice.body, generating, modelName != null, viewModel::refreshDailyAdvice, viewModel::stopDailyAdvice, onNavigateToModelSetup, isModelLoading = modelLoadState == ModelLoadState.Loading, title = advice.title, onAsk = { onAskAdvice("根據這段今日建議提供具體替代食物：\n${advice.title}\n${advice.body}") }, onRecord = { editorId = 0; copyMeal = false; showManualAdd = true }) }
+            adviceUpdatedAt?.let { timestamp -> item(key = "advice-update") {
+                Text("建議更新：${Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("M/d HH:mm"))}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } }
+            item(key = "today-progress") {
+                TodayProgressCard(profile, meals, water.waterConsumedMl, water.waterTargetMl, waterBusy, onAddWater = { amount ->
                     scope.launch {
                         val date = today
                         waterBusy = true
@@ -132,44 +149,77 @@ fun DashboardScreen(
                             waterBusy = false
                         }
                     }
-                }, onSettings = onNavigateToReminders)
+                }, onSettings = onNavigateToReminders, servingMl = water.waterServingMl)
             }
+        }
+        fun LazyListScope.historyItems() {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("今日餐點", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("${meals.size} 筆紀錄", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(if (mealDate == today) "今日餐點" else "$mealDate 餐點", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("${selectedMeals.size} 筆紀錄", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            if (meals.isEmpty()) {
+            item(key = "meal-date") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { viewModel.selectMealDate(mealDate.minusDays(1)) }) { Icon(Icons.Default.ChevronLeft, "前一天") }
+                    TextButton(onClick = { showDatePicker = true }, modifier = Modifier.weight(1f)) { Text(mealDate.toString()) }
+                    TextButton(onClick = { viewModel.selectMealDate(today) }) { Text("今天") }
+                    IconButton(enabled = mealDate < today, onClick = { viewModel.selectMealDate(mealDate.plusDays(1)) }) { Icon(Icons.Default.ChevronRight, "後一天") }
+                }
+            }
+            if (selectedMeals.isEmpty()) {
                 item {
                     OutlinedCard {
                         Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Icon(Icons.Default.Restaurant, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
-                            Text("從第一餐開始", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            Text("記錄餐點，就能看見今天的營養進度。", style = MaterialTheme.typography.bodyMedium,
+                            Text(if (mealDate == today) "從第一餐開始" else "這天還沒有餐點紀錄", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text(if (mealDate == today) "記錄餐點，就能看見今天的營養進度。" else "可補登當天的餐點與份量。", style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            TextButton(onClick = { showManualAdd = true }) { Text("新增餐點") }
+                            TextButton(onClick = { editorId = 0; copyMeal = false; showManualAdd = true }) { Text("新增餐點") }
                         }
                     }
                 }
             } else {
-                items(meals, key = { it.id }) { meal -> MealLogCard(meal, onDelete = { pendingDelete = meal }) }
+                selectedMeals.groupBy { it.mealType }.forEach { (type, records) ->
+                    item(key = "type-$type") { Text(type, style = MaterialTheme.typography.titleSmall) }
+                    items(records, key = { "meal-${it.id}" }) { meal ->
+                        MealLogCard(meal, onDelete = { pendingDelete = meal }, onEdit = {
+                            editorId = meal.id; copyMeal = false; showManualAdd = true
+                        }, onRepeat = { editorId = meal.id; copyMeal = true; showManualAdd = true })
+                    }
+                }
             }
-            item { WeeklyOverview(week) }
-            item { DailyAdviceCard(advice, generating, modelName != null, viewModel::refreshDailyAdvice, viewModel::stopDailyAdvice, onNavigateToModelSetup) }
+            item(key = "weight-trend") {
+                OutlinedCard(onClick = { showWeight = true }, modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("體重與目標", style = MaterialTheme.typography.titleMedium)
+                            Text(weights.lastOrNull()?.let { "${it.weightKg} kg · ${it.date}" } ?: "開始記錄體重趨勢")
+                        }
+                        Icon(Icons.Default.ShowChart, "開啟體重趨勢")
+                    }
+                }
+            }
+            item(key = "weekly-overview") { WeeklyOverview(week, profile.targetCalories, mealDate) { date ->
+                viewModel.selectMealDate(date)
+                scope.launch {
+                    if (adaptive.expanded || adaptive.folds.any { it.isSeparating }) historyScroll.animateScrollToItem(0)
+                    else compactScroll.animateScrollToItem(4 + (if (modelLoadState == ModelLoadState.Loaded) 0 else 1) + (if (adviceUpdatedAt != null) 1 else 0))
+                }
+            } }
         }
-    }
-    if (showManualAdd) ManualMealDialog(viewModel) { showManualAdd = false }
-    if (showScannerSetup) {
-        AlertDialog(
-            onDismissRequest = { showScannerSetup = false },
-            icon = { Icon(Icons.Default.PhotoCamera, null) },
-            title = { Text("啟用拍照辨識") },
-            text = { Text("首次使用需要下載食物辨識模型，也可以先手動記錄這一餐。") },
-            confirmButton = { TextButton(onClick = { showScannerSetup = false; onNavigateToModelSetup() }) { Text("前往設定") } },
-            dismissButton = { TextButton(onClick = { showScannerSetup = false; showManualAdd = true }) { Text("手動記錄") } }
+        val pagePadding = PaddingValues(start = 20.dp, end = 20.dp, top = padding.calculateTopPadding() + 8.dp, bottom = 24.dp + bottomContentPadding)
+        AdaptivePanes(
+            primary = { LazyColumn(Modifier.fillMaxSize(), contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(16.dp)) { summaryItems() } },
+            secondary = { LazyColumn(Modifier.fillMaxSize(), state = historyScroll, contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(16.dp)) { historyItems() } },
+            compact = { LazyColumn(Modifier.fillMaxSize(), state = compactScroll, contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(16.dp)) { summaryItems(); historyItems() } }
         )
+    }
+    if (showDatePicker) com.xuan.fitai.ui.components.PastDatePickerDialog(mealDate, viewModel::selectMealDate) { showDatePicker = false }
+    if (showWeight) WeightTrendDialog(profile, weights, { showWeight = false }, viewModel::saveWeight, viewModel::applyWeight)
+    if (showManualAdd) key(editorId, copyMeal) {
+        ManualMealDialog(viewModel, history.firstOrNull { it.id == editorId }, copyMeal, mealDate) { showManualAdd = false }
     }
     pendingDelete?.let { meal ->
         AlertDialog(
@@ -182,18 +232,24 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun MealLogCard(meal: Meal, onDelete: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+private fun MealLogCard(meal: Meal, onDelete: () -> Unit, onEdit: () -> Unit, onRepeat: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onEdit), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
         Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(meal.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("${if (meal.isFavorite) "★ " else ""}${meal.name}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     val time = Instant.ofEpochMilli(meal.timestamp).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
                     Text("$time · ${if (meal.isAiEstimated) "AI 估算" else "手動記錄"}",
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 IconButton(onClick = onDelete) { Icon(Icons.Default.DeleteOutline, "刪除${meal.name}", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+            Text("${meal.portionSize} · ${meal.mealType}", style = MaterialTheme.typography.bodySmall)
+            com.xuan.fitai.ui.components.NutritionReferenceBadge(meal.nutritionReferenceJson)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onEdit) { Text("編輯") }
+                TextButton(onClick = onRepeat) { Icon(Icons.Default.ContentCopy, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("再記一次") }
             }
             Text("${meal.calories.toInt()} kcal", style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)

@@ -10,17 +10,12 @@ import androidx.activity.SystemBarStyle
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.isSystemInDarkTheme
 import com.xuan.fitai.theme.FitAITheme
-import com.xuan.fitai.ui.components.LoadingDialog
 import com.xuan.fitai.data.model.AppearanceSettings
 import com.xuan.fitai.data.model.ThemeMode
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -32,6 +27,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         val app = application as FitAIApplication
+        app.warmModelsForUi()
         handleNotificationIntent(intent)
         handleClipboardIntent(intent)
 
@@ -55,29 +51,18 @@ class MainActivity : ComponentActivity() {
                 darkTheme = isDark,
                 dynamicColor = appearance.useWallpaperColors,
                 customHue = appearance.customHue,
-                customSaturation = appearance.customSaturation
+                customSaturation = appearance.customSaturation,
+                fontScale = appearance.fontScale
             ) {
-                var startupInitializing by remember { mutableStateOf(true) }
-
-                LaunchedEffect(Unit) {
-                    try {
-                        app.modelManager.initializeDefaultModels()
-                    } finally {
-                        startupInitializing = false
-                    }
-                }
-
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    if (startupInitializing) {
-                        StartupLoadingDialog()
-                    } else {
-                        MainNavigation(
-                            openRemindersRequest = openRemindersRequest,
-                            onNavigateToRemindersHandled = { openRemindersRequest = 0 }
-                        )
+                    com.xuan.fitai.ui.adaptive.ProvideAdaptiveLayout {
+                    MainNavigation(
+                        openRemindersRequest = openRemindersRequest,
+                        onNavigateToRemindersHandled = { openRemindersRequest = 0 }
+                    )
                     }
                 }
             }
@@ -110,12 +95,4 @@ class MainActivity : ComponentActivity() {
     private companion object {
         const val EXTRA_OPEN_REMINDERS = "open_reminders"
     }
-}
-
-@Composable
-private fun StartupLoadingDialog() {
-    LoadingDialog(
-        title = "FitAI",
-        message = "正在準備你的 AI 助理…"
-    )
 }

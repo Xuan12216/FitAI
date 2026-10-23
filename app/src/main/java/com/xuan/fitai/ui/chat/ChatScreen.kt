@@ -114,6 +114,7 @@ fun ChatScreen(
     onNavigateBack: () -> Unit,
     onNavigateToSetup: () -> Unit,
     bottomOverlayPadding: Dp = 0.dp,
+    initialPrompt: String = "",
 ) {
     val messages by viewModel.chatMessages.collectAsState()
     val isGenerating by viewModel.isGenerating.collectAsState()
@@ -126,11 +127,11 @@ fun ChatScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
-    var inputQuery by remember { mutableStateOf("") }
-    var selectedImages by remember { mutableStateOf<List<Bitmap>>(emptyList()) }
+    var showClearConfirmation by remember { mutableStateOf(false) }
+    var mealDraft by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    var inputQuery by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(initialPrompt) }
     var viewerImages by remember { mutableStateOf<List<Bitmap>>(emptyList()) }
     var previewImageIndex by remember { mutableStateOf<Int?>(null) }
-    var audioBytes by remember { mutableStateOf<ByteArray?>(null) }
     var isRecording by remember { mutableStateOf(false) }
     var playingAudioId by remember { mutableStateOf<Int?>(null) }
     var mediaError by remember { mutableStateOf<String?>(null) }
@@ -155,8 +156,8 @@ fun ChatScreen(
             if (bitmaps.isEmpty()) {
                 mediaError = "無法讀取這張圖片"
             } else {
-                selectedImages = selectedImages + bitmaps
-                mediaError = if (bitmaps.size == uris.size) null else "??敺蝪輸???"
+                viewModel.draftImages = viewModel.draftImages + bitmaps
+                mediaError = if (bitmaps.size == uris.size) null else "部分圖片無法讀取，已加入其他可用圖片"
             }
         }
     }
@@ -164,7 +165,7 @@ fun ChatScreen(
         ActivityResultContracts.TakePicturePreview()
     ) { bitmap: Bitmap? ->
         bitmap?.scaleForChat()?.let {
-            selectedImages = selectedImages + it
+            viewModel.draftImages = viewModel.draftImages + it
             mediaError = null
         }
     }
@@ -200,15 +201,15 @@ fun ChatScreen(
     }
 
     fun sendCurrentMessage() {
-        val hasAttachment = selectedImages.isNotEmpty() || audioBytes?.isNotEmpty() == true
+        val hasAttachment = viewModel.draftImages.isNotEmpty() || viewModel.draftAudio?.isNotEmpty() == true
         if (isGenerating || isRecording || (inputQuery.isBlank() && !hasAttachment)) return
         audioPlayer.stop { playingAudioId = it }
-        if (!viewModel.sendMessage(inputQuery, selectedImages, audioBytes)) return
+        if (!viewModel.sendMessage(inputQuery, viewModel.draftImages, viewModel.draftAudio)) return
         inputQuery = ""
-        selectedImages = emptyList()
+        viewModel.draftImages = emptyList()
         previewImageIndex = null
         viewerImages = emptyList()
-        audioBytes = null
+        viewModel.draftAudio = null
         mediaError = null
     }
 
@@ -252,6 +253,14 @@ fun ChatScreen(
         }
     }
 
+    if (showClearConfirmation) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { showClearConfirmation = false }, title = { Text("清除所有聊天紀錄？") },
+        text = { Text("清除後無法復原，餐點與訓練紀錄不受影響。") },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { viewModel.clearChat(); showClearConfirmation = false }) { Text("清除紀錄") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { showClearConfirmation = false }) { Text("取消") } }
+    )
+    mealDraft?.let { source -> ChatMealDraftDialog(source, onDismiss = { mealDraft = null }, onSave = viewModel::saveMealFromChat) }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
@@ -266,7 +275,7 @@ fun ChatScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.clearChat() }) {
+                    IconButton(onClick = { showClearConfirmation = true }) {
                         Icon(Icons.Default.Delete, contentDescription = "清除聊天紀錄")
                     }
                 }
@@ -283,20 +292,28 @@ fun ChatScreen(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = "Gemma 模型尚未載入",
+                    text = if (gemmaLoadState == ModelLoadState.Loading) "AI 助理正在背景暖機" else "Gemma 模型尚未載入",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.heightIn(min = 8.dp))
                 Text(
-                    text = "請先前往模型設定頁面下載或匯入 Gemma 模型。",
+                    text = if (gemmaLoadState == ModelLoadState.Loading) {
+                        "準備完成後會自動開啟對話，你可以先返回使用其他功能。"
+                    } else {
+                        "請先前往模型設定頁面下載或匯入 Gemma 模型。"
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
                 Spacer(modifier = Modifier.heightIn(min = 24.dp))
-                androidx.compose.material3.Button(onClick = onNavigateToSetup) {
-                    Text("前往模型設定")
+                if (gemmaLoadState == ModelLoadState.Loading) {
+                    AppLoadingIndicator()
+                } else {
+                    androidx.compose.material3.Button(onClick = onNavigateToSetup) {
+                        Text("前往模型設定")
+                    }
                 }
             }
         } else {
@@ -331,6 +348,14 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(vertical = 16.dp)
                 ) {
+                    if (messages.isEmpty()) item(key = "quick-prompts") {
+                        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("今天想先解決什麼？", style = MaterialTheme.typography.titleMedium)
+                            listOf("根據今天剩餘熱量，晚餐可以怎麼安排？", "幫我分析外食菜單", "幫我安排 15 分鐘居家訓練").forEach { prompt ->
+                                androidx.compose.material3.SuggestionChip(onClick = { inputQuery = prompt }, label = { Text(prompt) })
+                            }
+                        }
+                    }
                     items(
                         items = messages,
                         key = { msg -> if (msg.id == 0) "streaming" else msg.id },
@@ -363,6 +388,9 @@ fun ChatScreen(
                                     value = withContext(Dispatchers.Default) {
                                         ChatImageCodec.decode(msg.imageBytes)
                                     }
+                                }
+                                if (!isUser && !isGenerating) {
+                                    androidx.compose.material3.TextButton(onClick = { mealDraft = msg.content }) { Text("建立餐點草稿") }
                                 }
                                 if (isUser) {
                                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -449,7 +477,7 @@ fun ChatScreen(
                         .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 12.dp + bottomOverlayPadding),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (selectedImages.isNotEmpty() || audioBytes?.isNotEmpty() == true) {
+                    if (viewModel.draftImages.isNotEmpty() || viewModel.draftAudio?.isNotEmpty() == true) {
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceContainerHighest,
                             shape = MaterialTheme.shapes.medium,
@@ -460,19 +488,19 @@ fun ChatScreen(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                if (selectedImages.isNotEmpty()) {
+                                if (viewModel.draftImages.isNotEmpty()) {
                                     ChatImageCarousel(
-                                        images = selectedImages,
+                                        images = viewModel.draftImages,
                                         onImageClick = {
-                                            viewerImages = selectedImages
+                                            viewerImages = viewModel.draftImages
                                             previewImageIndex = it
                                         },
                                         onRemoveImage = { index ->
-                                            selectedImages = selectedImages.filterIndexed { i, _ -> i != index }
+                                            viewModel.draftImages = viewModel.draftImages.filterIndexed { i, _ -> i != index }
                                         },
                                     )
                                 }
-                                if (audioBytes?.isNotEmpty() == true) {
+                                if (viewModel.draftAudio?.isNotEmpty() == true) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically,
@@ -482,7 +510,7 @@ fun ChatScreen(
                                             onClick = {
                                                 audioPlayer.toggle(
                                                     id = PREVIEW_AUDIO_ID,
-                                                    audioBytes = audioBytes!!,
+                                                    audioBytes = viewModel.draftAudio!!,
                                                     onPlayingChanged = { playingAudioId = it },
                                                 )
                                             },
@@ -503,13 +531,13 @@ fun ChatScreen(
                                         }
                                         Icon(Icons.Default.GraphicEq, contentDescription = null)
                                         Text(
-                                            "語音 (${audioBytes!!.size / 1024} KB)",
+                                            "語音 (${viewModel.draftAudio!!.size / 1024} KB)",
                                             style = MaterialTheme.typography.labelLarge,
                                         )
                                         IconButton(
                                             onClick = {
                                                 audioPlayer.stop { playingAudioId = it }
-                                                audioBytes = null
+                                                viewModel.draftAudio = null
                                             },
                                         ) {
                                             Icon(Icons.Default.Close, contentDescription = "移除語音")
@@ -594,7 +622,7 @@ fun ChatScreen(
                                                 val wavBytes = audioRecorder.stop()
                                                 isRecording = false
                                                 if (ChatAudioRecorder.hasAudioSignal(wavBytes)) {
-                                                    audioBytes = wavBytes
+                                                    viewModel.draftAudio = wavBytes
                                                     mediaError = null
                                                 } else {
                                                     mediaError = "沒有錄到有效語音，請確認麥克風權限後再試一次"
@@ -647,14 +675,14 @@ fun ChatScreen(
                                         onClick = { if (isGenerating) viewModel.stopGeneration() else sendCurrentMessage() },
                                         enabled = isGenerating || (
                                             inputQuery.isNotBlank() ||
-                                                selectedImages.isNotEmpty() ||
-                                                audioBytes?.isNotEmpty() == true
+                                                viewModel.draftImages.isNotEmpty() ||
+                                                viewModel.draftAudio?.isNotEmpty() == true
                                             ),
                                         colors = IconButtonDefaults.iconButtonColors(
                                             contentColor = if (
                                                 inputQuery.isNotBlank() ||
-                                                    selectedImages.isNotEmpty() ||
-                                                    audioBytes?.isNotEmpty() == true
+                                                    viewModel.draftImages.isNotEmpty() ||
+                                                    viewModel.draftAudio?.isNotEmpty() == true
                                             ) {
                                                 MaterialTheme.colorScheme.primary
                                             } else {
@@ -732,7 +760,7 @@ private fun ChatImageCarousel(
         Box(modifier = Modifier.fillMaxSize()) {
             Image(
                 bitmap = images[index].asImageBitmap(),
-                contentDescription = "?? ${index + 1}",
+                contentDescription = "圖片 ${index + 1}",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
@@ -757,7 +785,7 @@ private fun ChatImageCarousel(
                 ) {
                     Icon(
                         Icons.Default.Close,
-                        contentDescription = "蝘駁??",
+                        contentDescription = "移除圖片",
                         modifier = Modifier.size(18.dp),
                     )
                 }
@@ -796,7 +824,7 @@ private fun ChatImageViewer(
                 ) { page ->
                     ZoomableChatImage(
                         bitmap = images[page],
-                        contentDescription = "?? ${page + 1}",
+                        contentDescription = "圖片 ${page + 1}",
                     )
                 }
                 IconButton(
@@ -809,7 +837,7 @@ private fun ChatImageViewer(
                         containerColor = Color.Black.copy(alpha = 0.55f),
                     ),
                 ) {
-                    Icon(Icons.Default.Close, contentDescription = "蝘駁")
+                    Icon(Icons.Default.Close, contentDescription = "關閉")
                 }
                 if (images.size > 1) {
                     Text(

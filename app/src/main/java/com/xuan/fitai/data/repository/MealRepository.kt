@@ -6,6 +6,7 @@ import com.xuan.fitai.util.DateTimeUtil
 import kotlinx.coroutines.flow.Flow
 
 class MealRepository(private val mealDao: MealDao) {
+    val allMeals = mealDao.getAllMeals()
     fun getMealsBetween(startMillis: Long, endMillis: Long): Flow<List<Meal>> =
         mealDao.getMealsBetween(startMillis, endMillis)
 
@@ -23,7 +24,5 @@ class MealRepository(private val mealDao: MealDao) {
         mealDao.deleteMeal(meal)
     }
 
-    suspend fun updateMeal(meal: Meal) {
-        mealDao.updateMeal(meal)
-    }
+    suspend fun updateMeal(meal: Meal): Int = mealDao.updateMeal(meal)
 }

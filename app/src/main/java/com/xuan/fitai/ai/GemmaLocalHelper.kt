@@ -21,7 +21,7 @@ interface GemmaLocalHelper {
         audioBytes: ByteArray? = null,
     ): kotlinx.coroutines.flow.Flow<String> = generateReplyFlow(prompt)
     suspend fun analyzeFood(foodName: String, portion: String, goal: String): GemmaFoodAnalysis
-    fun analyzeFoodFlow(foodName: String, portion: String, goal: String): kotlinx.coroutines.flow.Flow<String>
+    fun analyzeFoodFlow(foodName: String, portion: String, goal: String, referenceData: String = ""): kotlinx.coroutines.flow.Flow<String>
     suspend fun identifyFoodFromImage(bitmap: Bitmap): String
     fun identifyFoodFromImageFlow(bitmap: Bitmap): kotlinx.coroutines.flow.Flow<String>
 }
@@ -34,5 +34,6 @@ data class GemmaFoodAnalysis(
     val isSuitable: Boolean,
     val advice: String,
     val reasoning: String = "",
-    val thinking: String? = null
+    val thinking: String? = null,
+    val referenceFoodId: String? = null
 )

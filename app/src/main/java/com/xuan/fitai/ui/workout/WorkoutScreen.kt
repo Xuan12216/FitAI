@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -40,6 +41,7 @@ fun WorkoutScreen(
     showAddWorkoutFab: Boolean = true,
     workoutFabBottomPadding: Dp = 0.dp,
 ) {
+    var pendingWeekReset by remember { mutableStateOf<WorkoutPlan?>(null) }
     val profile by viewModel.userProfile.collectAsState()
     val plans by viewModel.workoutPlans.collectAsState()
     val isGenerating by viewModel.isGenerating.collectAsState()
@@ -49,9 +51,10 @@ fun WorkoutScreen(
     val healthData by viewModel.healthData.collectAsState()
     val hasHealthPermissions by viewModel.hasHealthPermissions.collectAsState()
 
-    var showAiDialog by remember { mutableStateOf(false) }
-    var showAddEditDialog by remember { mutableStateOf(false) }
-    var selectedPlanForEdit by remember { mutableStateOf<WorkoutPlan?>(null) }
+    var showAiDialog by rememberSaveable { mutableStateOf(false) }
+    var showAddEditDialog by rememberSaveable { mutableStateOf(false) }
+    var selectedPlanId by rememberSaveable { mutableIntStateOf(0) }
+    val selectedPlanForEdit = plans.firstOrNull { it.id == selectedPlanId }
 
     // Health Connect Permission Launcher
     val permissionsLauncher = rememberLauncherForActivityResult(
@@ -62,6 +65,12 @@ fun WorkoutScreen(
     }
 
     // Refresh Health Connect data when entering screen or returning from Play Store/Settings
+    pendingWeekReset?.let { plan ->
+        AlertDialog(onDismissRequest = { pendingWeekReset = null }, title = { Text("重設本週這個動作？") },
+            text = { Text("將移除「${plan.exerciseName}」本週已記錄的組數與重量，其他週不受影響。") },
+            confirmButton = { TextButton(onClick = { viewModel.toggleWorkoutPlan(plan); pendingWeekReset = null }) { Text("重設本週") } },
+            dismissButton = { TextButton(onClick = { pendingWeekReset = null }) { Text("保留") } })
+    }
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
@@ -117,7 +126,7 @@ fun WorkoutScreen(
             if (showAddWorkoutFab) {
                 FloatingActionButton(
                     onClick = {
-                        selectedPlanForEdit = null
+                        selectedPlanId = 0
                         showAddEditDialog = true
                     },
                     modifier = Modifier.padding(bottom = workoutFabBottomPadding),
@@ -192,6 +201,7 @@ fun WorkoutScreen(
 
 
 
+                    item { WorkoutSessionTools(viewModel, plans) }
                     // Show the card while the combined plan + summary request is running.
                     if (!workoutSummary.isNullOrBlank() || isSummarizing) {
                         item {
@@ -234,7 +244,7 @@ fun WorkoutScreen(
                             plans = todayPlans,
                             onToggle = viewModel::toggleWorkoutPlan,
                             onEdit = {
-                                selectedPlanForEdit = it
+                                selectedPlanId = it.id
                                 showAddEditDialog = true
                             },
                             onDelete = viewModel::deleteWorkoutPlan
@@ -266,7 +276,7 @@ fun WorkoutScreen(
                                 plan = item,
                                 onToggle = { viewModel.toggleWorkoutPlan(item) },
                                 onEdit = {
-                                    selectedPlanForEdit = item
+                                    selectedPlanId = item.id
                                     showAddEditDialog = true
                                 },
                                 onDelete = { viewModel.deleteWorkoutPlan(item) }
@@ -280,8 +290,8 @@ fun WorkoutScreen(
 
     // AI Generation Configuration Dialog
     if (showAiDialog) {
-        var daysPerWeek by remember { mutableStateOf(3) }
-        var preference by remember { mutableStateOf("阻力訓練") }
+        var daysPerWeek by rememberSaveable { mutableStateOf(3) }
+        var preference by rememberSaveable { mutableStateOf("阻力訓練") }
 
         AlertDialog(
             onDismissRequest = { showAiDialog = false },
@@ -311,7 +321,7 @@ fun WorkoutScreen(
 
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("訓練偏好：", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             listOf("阻力訓練", "有氧減脂", "徒手健體", "混合訓練").forEach { pref ->
                                 FilterChip(
                                     selected = preference == pref,
@@ -342,12 +352,12 @@ fun WorkoutScreen(
     }
 
     // Add / Edit Manual Workout Dialog
-    if (showAddEditDialog) {
-        var dayOfWeek by remember { mutableStateOf(selectedPlanForEdit?.dayOfWeek ?: "星期一") }
-        var exerciseName by remember { mutableStateOf(selectedPlanForEdit?.exerciseName ?: "") }
-        var setsString by remember { mutableStateOf(selectedPlanForEdit?.sets?.toString() ?: "3") }
-        var reps by remember { mutableStateOf(selectedPlanForEdit?.reps ?: "10次") }
-        var targetMuscleGroup by remember { mutableStateOf(selectedPlanForEdit?.targetMuscleGroup ?: "全身") }
+    if (showAddEditDialog && (selectedPlanId == 0 || selectedPlanForEdit != null)) {
+        var dayOfWeek by rememberSaveable { mutableStateOf(selectedPlanForEdit?.dayOfWeek ?: "星期一") }
+        var exerciseName by rememberSaveable { mutableStateOf(selectedPlanForEdit?.exerciseName ?: "") }
+        var setsString by rememberSaveable { mutableStateOf(selectedPlanForEdit?.sets?.toString() ?: "3") }
+        var reps by rememberSaveable { mutableStateOf(selectedPlanForEdit?.reps ?: "10次") }
+        var targetMuscleGroup by rememberSaveable { mutableStateOf(selectedPlanForEdit?.targetMuscleGroup ?: "全身") }
 
         AlertDialog(
             onDismissRequest = { showAddEditDialog = false },
@@ -362,6 +372,7 @@ fun WorkoutScreen(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    com.xuan.fitai.ui.adaptive.AdaptiveDialogPlacement()
                     // Day of week selector
                     var showDayDropdown by remember { mutableStateOf(false) }
                     Box(modifier = Modifier.fillMaxWidth()) {
@@ -419,8 +430,9 @@ fun WorkoutScreen(
             },
             confirmButton = {
                 Button(
+                    enabled = exerciseName.isNotBlank() && reps.isNotBlank() && targetMuscleGroup.isNotBlank() && setsString.toIntOrNull()?.let { it in 1..100 } == true,
                     onClick = {
-                        val sets = setsString.toIntOrNull() ?: 3
+                        val sets = setsString.toIntOrNull() ?: return@Button
                         if (exerciseName.isNotBlank()) {
                             if (selectedPlanForEdit == null) {
                                 viewModel.addWorkoutPlan(dayOfWeek, exerciseName, sets, reps, targetMuscleGroup)
@@ -636,7 +648,7 @@ private fun MuscleBalanceCard(topMuscleGroups: List<Map.Entry<String, Int>>) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(imageVector = Icons.Default.Face, contentDescription = null)
+                Icon(imageVector = Icons.Default.BarChart, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "肌群分布",
@@ -723,7 +735,7 @@ private fun AISummaryCard(
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = Icons.Default.Face,
+                    imageVector = Icons.Default.AutoAwesome,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary
                 )

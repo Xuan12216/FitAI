@@ -12,6 +12,7 @@ data class ReminderSettings(
     val meals: List<MealReminder> = defaultMeals(),
     val waterRemindersEnabled: Boolean = false,
     val waterTargetMl: Int = 2000,
+    val waterServingMl: Int = 250,
     val waterIntervalMinutes: Int = 60,
     val waterStartHour: Int = 8,
     val waterEndHour: Int = 22,

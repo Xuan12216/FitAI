@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.xuan.fitai.ai.*
+import com.xuan.fitai.nutrition.*
 import com.xuan.fitai.data.model.Meal
 import com.xuan.fitai.data.model.ModelLoadState
 import com.xuan.fitai.data.model.UserProfile
@@ -25,11 +26,13 @@ sealed class ScannerUiState {
         val gemmaIdentified: Boolean = false,
         val isRecognizing: Boolean = false
     ) : ScannerUiState()
-    data class GemmaAnalysisStreaming(val rawText: String = "") : ScannerUiState()
+    data class GemmaAnalysisStreaming(val rawText: String = "", val status: String = "本地 AI 估算中…", val lookupMessage: String = "") : ScannerUiState()
     data class GemmaAnalysisResult(
         val foodName: String,
         val portion: String,
-        val analysis: GemmaFoodAnalysis
+        val analysis: GemmaFoodAnalysis,
+        val referenceJson: String? = null,
+        val lookupMessage: String = ""
     ) : ScannerUiState()
     data object SavedSuccess : ScannerUiState()
     data class Error(val message: String) : ScannerUiState()
@@ -39,7 +42,8 @@ class FoodScannerViewModel(
     private val userRepository: UserRepository,
     private val mealRepository: MealRepository,
     private val gemmaHelper: GemmaLocalHelper,
-    private val classifierHelper: FoodClassifierHelper
+    private val classifierHelper: FoodClassifierHelper,
+    private val foodAssessment: FoodAssessment
 ) : ViewModel() {
 
     private companion object {
@@ -59,7 +63,10 @@ class FoodScannerViewModel(
     private val _uiState = MutableStateFlow<ScannerUiState>(ScannerUiState.CameraPreview)
     val uiState: StateFlow<ScannerUiState> = _uiState.asStateFlow()
 
+    val capturedImage = MutableStateFlow<Bitmap?>(null)
+
     fun resetScanner() {
+        capturedImage.value = null
         _uiState.value = ScannerUiState.CameraPreview
     }
 
@@ -77,6 +84,7 @@ class FoodScannerViewModel(
     }
 
     fun classifyImage(bitmap: Bitmap) {
+        capturedImage.value = bitmap
         viewModelScope.launch {
             _uiState.value = ScannerUiState.EditDetails(
                 detectedLabel = "辨識中...",
@@ -189,7 +197,7 @@ class FoodScannerViewModel(
         }
     }
 
-    fun analyzeWithGemma(foodName: String, portion: String) {
+    fun analyzeWithGemma(foodName: String, portion: String, useReference: Boolean = true) {
         viewModelScope.launch {
             if (gemmaLoadState.value != ModelLoadState.Loaded) {
                 _uiState.value = ScannerUiState.Error("Gemma AI 模型尚未載入，請先前往設定頁面載入模型")
@@ -199,12 +207,22 @@ class FoodScannerViewModel(
             try {
                 val goal = userProfile.value.goal
                 val response = StringBuilder()
-                gemmaHelper.analyzeFoodFlow(foodName, portion, goal).collect { token ->
-                    response.append(token)
-                    _uiState.value = ScannerUiState.GemmaAnalysisStreaming(response.toString())
+                var reference: String? = null
+                var message = ""
+                var status = "本地 AI 估算中…"
+                foodAssessment.analyze(foodName, portion, goal, useReference).collect { event ->
+                    when (event) {
+                        is FoodAssessmentEvent.Status -> status = event.text
+                        is FoodAssessmentEvent.Lookup -> {
+                            reference = event.result.reference?.let(NutritionReferenceJson::encode)
+                            message = event.result.message
+                        }
+                        is FoodAssessmentEvent.Token -> response.append(event.text)
+                    }
+                    _uiState.value = ScannerUiState.GemmaAnalysisStreaming(response.toString(), status, message)
                 }
-                val analysis = GemmaOutputParser.parseFoodAnalysis(response.toString())
-                _uiState.value = ScannerUiState.GemmaAnalysisResult(foodName, portion, analysis)
+                val analysis = NutritionPortionCalculator.apply(GemmaOutputParser.parseFoodAnalysis(response.toString()), NutritionReferenceJson.decodeOrNull(reference), portion)
+                _uiState.value = ScannerUiState.GemmaAnalysisResult(foodName, portion, analysis, NutritionReferenceJson.withSelection(reference, analysis.referenceFoodId), message)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -213,25 +231,33 @@ class FoodScannerViewModel(
         }
     }
 
+    val isSaving = MutableStateFlow(false)
     fun saveMeal(foodName: String, portion: String, analysis: GemmaFoodAnalysis, onComplete: () -> Unit) {
+        if (isSaving.value) return
+        require(listOf(analysis.calories, analysis.protein, analysis.carbs, analysis.fat).all { it.isFinite() && it >= 0 })
+        isSaving.value = true
+        val reference = (_uiState.value as? ScannerUiState.GemmaAnalysisResult)?.referenceJson
         viewModelScope.launch {
             try {
                 val meal = Meal(
-                    name = "$foodName ($portion)",
+                    name = foodName.trim(),
                     calories = analysis.calories,
                     protein = analysis.protein,
                     carbs = analysis.carbs,
                     fat = analysis.fat,
                     portionSize = portion,
                     isAiEstimated = true,
-                    aiAdvice = analysis.advice
+                    aiAdvice = analysis.advice,
+                    nutritionReferenceJson = reference
                 )
                 mealRepository.insertMeal(meal)
                 _uiState.value = ScannerUiState.SavedSuccess
                 onComplete()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.value = ScannerUiState.Error("儲存失敗: ${e.localizedMessage}")
-            }
+            } finally { isSaving.value = false }
         }
     }
 
@@ -239,12 +265,13 @@ class FoodScannerViewModel(
         private val userRepository: UserRepository,
         private val mealRepository: MealRepository,
         private val gemmaHelper: GemmaLocalHelper,
-        private val classifierHelper: FoodClassifierHelper
+        private val classifierHelper: FoodClassifierHelper,
+        private val foodAssessment: FoodAssessment
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(FoodScannerViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return FoodScannerViewModel(userRepository, mealRepository, gemmaHelper, classifierHelper) as T
+                return FoodScannerViewModel(userRepository, mealRepository, gemmaHelper, classifierHelper, foodAssessment) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

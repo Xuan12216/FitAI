@@ -3,6 +3,11 @@ package com.xuan.fitai.ui.workout
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.xuan.fitai.data.local.ProgressDao
+import com.xuan.fitai.data.model.WorkoutSetEntry
+import java.time.LocalDate
+import java.time.DayOfWeek
+import kotlinx.coroutines.withContext
 import com.xuan.fitai.ai.GemmaLocalHelper
 import com.xuan.fitai.ai.GemmaOutputParser
 import com.xuan.fitai.ai.PromptBuilder
@@ -23,14 +28,24 @@ class WorkoutViewModel(
     private val workoutRepository: WorkoutRepository,
     private val gemmaHelper: GemmaLocalHelper,
     private val healthConnectHelper: HealthConnectHelper,
-    private val userPreferenceStore: com.xuan.fitai.data.datastore.UserPreferenceStore
+    private val userPreferenceStore: com.xuan.fitai.data.datastore.UserPreferenceStore,
+    private val progressDao: ProgressDao
 ) : ViewModel() {
 
     val userProfile: StateFlow<UserProfile> = userRepository.userProfile
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UserProfile())
 
-    val workoutPlans: StateFlow<List<WorkoutPlan>> = workoutRepository.allWorkoutPlans
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val setHistory = progressDao.workoutSets().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val workoutPlans: StateFlow<List<WorkoutPlan>> = combine(workoutRepository.allWorkoutPlans, progressDao.workoutSets(), com.xuan.fitai.util.currentDateFlow()) { plans, logs, date ->
+        plans.map { plan -> plan.copy(sets = plan.sets.coerceIn(1, 100), isCompleted = WorkoutProgress.completedSets(plan, logs, date) >= plan.sets.coerceIn(1, 100)) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val restDeadline = MutableStateFlow<Long?>(null)
+    fun startRest(seconds: Int) { restDeadline.value = android.os.SystemClock.elapsedRealtime() + seconds * 1000L }
+    fun cancelRest() { restDeadline.value = null }
+    suspend fun recordSet(plan: WorkoutPlan, number: Int, weight: Float, reps: Int) {
+        require(number in 1..plan.sets && weight.isFinite() && weight >= 0 && weight <= 1000 && reps in 1..1000)
+        progressDao.saveSet(WorkoutSetEntry(planId = plan.id, exerciseName = plan.exerciseName, date = LocalDate.now().toString(), setNumber = number, weightKg = weight, reps = reps))
+    }
 
     private val _isGenerating = MutableStateFlow(false)
     val isGenerating: StateFlow<Boolean> = _isGenerating.asStateFlow()
@@ -140,9 +155,21 @@ class WorkoutViewModel(
         }
     }
 
+    val recordError = MutableStateFlow<String?>(null)
+    private val updatingPlans = mutableSetOf<Int>()
     fun toggleWorkoutPlan(plan: WorkoutPlan) {
+        if (!updatingPlans.add(plan.id)) return
+        recordError.value = null
         viewModelScope.launch {
-            workoutRepository.updateWorkoutPlan(plan.copy(isCompleted = !plan.isCompleted))
+            try {
+                val date = LocalDate.now()
+                val start = date.with(DayOfWeek.MONDAY).toString()
+                val end = date.with(DayOfWeek.SUNDAY).toString()
+                if (plan.isCompleted) progressDao.clearWeek(plan.id, start, end)
+                else progressDao.completeWeek(plan, date.toString(), start, end)
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { recordError.value = "更新訓練紀錄失敗，請再試一次" }
+            finally { updatingPlans.remove(plan.id) }
         }
     }
 
@@ -252,7 +279,7 @@ class WorkoutViewModel(
                             WorkoutPlan(
                                 dayOfWeek = obj.optString("dayOfWeek", "星期一"),
                                 exerciseName = obj.optString("exerciseName", "未知運動"),
-                                sets = obj.optInt("sets", 3),
+                                sets = obj.optInt("sets", 3).coerceIn(1, 100),
                                 reps = obj.optString("reps", "10下"),
                                 targetMuscleGroup = obj.optString("targetMuscleGroup", "全身")
                             )
@@ -349,12 +376,13 @@ class WorkoutViewModel(
         private val workoutRepository: WorkoutRepository,
         private val gemmaHelper: GemmaLocalHelper,
         private val healthConnectHelper: HealthConnectHelper,
-        private val userPreferenceStore: com.xuan.fitai.data.datastore.UserPreferenceStore
+        private val userPreferenceStore: com.xuan.fitai.data.datastore.UserPreferenceStore,
+        private val progressDao: ProgressDao
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(WorkoutViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return WorkoutViewModel(userRepository, workoutRepository, gemmaHelper, healthConnectHelper, userPreferenceStore) as T
+                return WorkoutViewModel(userRepository, workoutRepository, gemmaHelper, healthConnectHelper, userPreferenceStore, progressDao) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

@@ -473,7 +473,8 @@ object GemmaOutputParser {
                 isSuitable = json.optBoolean("suitable", true),
                 advice = json.optString("advice", "AI 已完成營養估算，請依實際份量微調。"),
                 reasoning = json.optString("reasoning", "依常見食物份量與營養比例估算。"),
-                thinking = thinkingText
+                thinking = thinkingText,
+                referenceFoodId = json.optString("referenceFoodId").takeIf { it.isNotBlank() }
             )
         } catch (e: Exception) {
             extractPartialFoodAnalysis(rawText, thinkingText)

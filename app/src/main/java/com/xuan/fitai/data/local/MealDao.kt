@@ -15,6 +15,15 @@ interface MealDao {
     @Delete
     suspend fun deleteMeal(meal: Meal)
 
+    @Query("SELECT * FROM meals ORDER BY timestamp DESC")
+    fun getAllMeals(): Flow<List<Meal>>
+
+    @Query("SELECT * FROM meals ORDER BY timestamp DESC")
+    suspend fun snapshotMeals(): List<Meal>
+
+    @Query("DELETE FROM meals")
+    suspend fun clearMeals()
+
     @Update
-    suspend fun updateMeal(meal: Meal)
+    suspend fun updateMeal(meal: Meal): Int
 }

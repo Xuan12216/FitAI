@@ -245,10 +245,11 @@ fun ReminderScreen(viewModel: ReminderViewModel, bottomContentPadding: Dp = 0.dp
                     Text("今日喝水  $todayConsumed / ${settings.waterTargetMl} ml", fontWeight = FontWeight.SemiBold)
                     LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(selected = false, onClick = { viewModel.addWater(250) }, label = { Text("+250 ml") })
+                        FilterChip(selected = false, onClick = { viewModel.addWater(settings.waterServingMl) }, label = { Text("+${settings.waterServingMl} ml") })
                         FilterChip(selected = false, onClick = { ReminderScheduler.sendTestWaterReminder(context) }, label = { Text("測試提醒") })
                     }
                     NumberRow("每日目標", settings.waterTargetMl, "ml", listOf(1500, 2000, 2500, 3000)) { value -> save { it.copy(waterTargetMl = value) } }
+                    CustomWaterFields(settings.waterTargetMl, settings.waterServingMl) { target, serving -> save { it.copy(waterTargetMl = target, waterServingMl = serving) } }
                     NumberRow("提醒頻率", settings.waterIntervalMinutes, "分鐘", listOf(30, 60, 90, 120)) { value -> save { it.copy(waterIntervalMinutes = value) } }
                     Text("提醒時段", style = MaterialTheme.typography.labelLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

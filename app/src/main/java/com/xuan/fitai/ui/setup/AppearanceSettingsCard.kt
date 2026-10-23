@@ -296,7 +296,7 @@ internal fun AppearanceSettingsCard(settings: AppearanceSettings, onChange: (App
 
             // 8. 恢復預設
             TextButton(
-                onClick = { onChange(AppearanceSettings(themeMode = settings.themeMode)) },
+                onClick = { onChange(AppearanceSettings(themeMode = settings.themeMode, fontScale = settings.fontScale)) },
                 contentPadding = PaddingValues(0.dp)
             ) {
                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))

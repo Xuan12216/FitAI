@@ -39,4 +39,21 @@ class AppearanceSettingsTest {
         assertEquals(0.65f, loaded.customSaturation ?: 0f, 0.001f)
         assertEquals("#3B82F6", loaded.customHex)
     }
+    @Test fun fontScalePersistsAndInvalidValuesCannotReachLayout() = runTest {
+        val store = UserPreferenceStore(PreferenceDataStoreFactory.create(scope = backgroundScope) { folder.newFile("font.preferences_pb") })
+        val appearance = AppearanceSettings(customHue = 210, fontScale = 1.3f)
+        store.saveAppearance(appearance)
+        assertEquals(appearance, store.appearanceFlow.first())
+        for (invalid in listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY)) {
+            store.saveAppearance(appearance.copy(fontScale = invalid))
+            val loaded = store.appearanceFlow.first()
+            assertEquals(1f, loaded.fontScale, 0.001f)
+            assertEquals(210, loaded.customHue)
+        }
+        store.saveAppearance(appearance.copy(fontScale = 0f))
+        assertEquals(0.85f, store.appearanceFlow.first().fontScale, 0.001f)
+        store.saveAppearance(appearance.copy(fontScale = 9f))
+        assertEquals(1.3f, store.appearanceFlow.first().fontScale, 0.001f)
+    }
+
 }

@@ -1,5 +1,6 @@
 package com.xuan.fitai.data.model
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -14,5 +15,8 @@ data class Meal(
     val timestamp: Long = System.currentTimeMillis(),
     val isAiEstimated: Boolean = false,
     val portionSize: String = "1份",
-    val aiAdvice: String? = null
+    val aiAdvice: String? = null,
+    @ColumnInfo(defaultValue = "'未分類'") val mealType: String = "未分類",
+    @ColumnInfo(defaultValue = "0") val isFavorite: Boolean = false,
+    @ColumnInfo(defaultValue = "NULL") val nutritionReferenceJson: String? = null
 )

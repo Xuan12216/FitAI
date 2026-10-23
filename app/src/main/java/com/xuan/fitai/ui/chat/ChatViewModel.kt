@@ -1,5 +1,9 @@
 package com.xuan.fitai.ui.chat
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import kotlinx.coroutines.cancelAndJoin
 import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -45,6 +49,8 @@ class ChatViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    var draftImages by mutableStateOf<List<Bitmap>>(emptyList())
+    var draftAudio by mutableStateOf<ByteArray?>(null)
     val gemmaLoadState = gemmaHelper.loadState
     val visionReady = gemmaHelper.visionReady
     val audioReady = gemmaHelper.audioReady
@@ -61,6 +67,11 @@ class ChatViewModel(
     private val _errorMsg = MutableStateFlow<String?>(null)
     val errorMsg: StateFlow<String?> = _errorMsg.asStateFlow()
 
+    suspend fun saveMealFromChat(name: String, calories: Float, protein: Float, carbs: Float, fat: Float) {
+        require(name.isNotBlank() && listOf(calories, protein, carbs, fat).all { it.isFinite() && it >= 0 })
+        mealRepository.insertMeal(com.xuan.fitai.data.model.Meal(name = name, calories = calories, protein = protein, carbs = carbs, fat = fat))
+    }
+
     fun sendMessage(
         userMessage: String,
         images: List<Bitmap> = emptyList(),
@@ -71,7 +82,11 @@ class ChatViewModel(
 
         _errorMsg.value = null
         if (gemmaLoadState.value != ModelLoadState.Loaded) {
-            _errorMsg.value = "請先至「模型設定」頁面載入 Gemma AI 模型"
+            _errorMsg.value = if (gemmaLoadState.value == ModelLoadState.Loading) {
+                "AI 助理正在背景暖機，準備完成後即可傳送訊息"
+            } else {
+                "請先至「模型設定」頁面載入 Gemma AI 模型"
+            }
             return false
         }
 
@@ -199,6 +214,9 @@ class ChatViewModel(
 
     fun clearChat() {
         viewModelScope.launch {
+            generationJob?.cancelAndJoin()
+            _streamingMessage.value = null
+            _isGenerating.value = false
             chatDao.clearChatHistory()
         }
     }

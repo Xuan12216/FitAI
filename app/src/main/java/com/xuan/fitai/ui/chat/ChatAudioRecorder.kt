@@ -45,19 +45,25 @@ class ChatAudioRecorder {
         require(minimumBufferSize > 0) { "此裝置不支援麥克風錄音" }
 
         val bufferSize = maxOf(minimumBufferSize, SAMPLE_RATE / 2)
-        val recorder = AudioRecord(
+        val recorder = try { AudioRecord(
             MediaRecorder.AudioSource.MIC,
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
             bufferSize,
-        )
-        check(recorder.state == AudioRecord.STATE_INITIALIZED) { "麥克風初始化失敗" }
+        ) } catch (error: SecurityException) {
+            throw IllegalStateException("請允許麥克風權限後再錄音", error)
+        }
+        if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+            recorder.release()
+            error("麥克風初始化失敗")
+        }
 
         pcmBuffer.reset()
         audioRecord = recorder
+        try { recorder.startRecording() }
+        catch (error: Exception) { recorder.release(); audioRecord = null; throw error }
         recording = true
-        recorder.startRecording()
         recordingJob = scope.launch {
             val buffer = ByteArray(bufferSize)
             while (recording) {

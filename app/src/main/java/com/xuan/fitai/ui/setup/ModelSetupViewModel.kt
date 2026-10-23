@@ -54,7 +54,7 @@ class ModelSetupViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0.95f)
 
     val temperature: StateFlow<Float> = userPreferenceStore.temperatureFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 1.0f)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0.85f)
 
     val useGpu: StateFlow<Boolean> = userPreferenceStore.useGpuFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)

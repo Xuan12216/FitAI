@@ -13,8 +13,9 @@ android {
         applicationId = "com.xuan.fitai"
         minSdk = 31
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 4
+        versionName = "1.3"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -86,6 +87,10 @@ dependencies {
   androidTestImplementation(libs.androidx.test.ext.junit)
   androidTestImplementation(libs.androidx.test.runner)
   androidTestImplementation(libs.androidx.test.espresso.core)
+
+  implementation("androidx.window:window:1.5.0")
+  implementation("androidx.work:work-runtime-ktx:2.12.0")
+  androidTestImplementation("androidx.work:work-testing:2.12.0")
 
   // Navigation Compose
   implementation(libs.androidx.navigation.compose)

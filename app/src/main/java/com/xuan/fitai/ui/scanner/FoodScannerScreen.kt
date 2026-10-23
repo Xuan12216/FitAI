@@ -7,6 +7,10 @@ import android.graphics.BitmapFactory
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -51,13 +55,14 @@ fun FoodScannerScreen(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
+    val saving by viewModel.isSaving.collectAsState()
+    val photo by viewModel.capturedImage.collectAsState()
     val userProfile by viewModel.userProfile.collectAsState()
 
     val classifierLoaded by viewModel.classifierLoadState.collectAsState()
     val gemmaLoaded by viewModel.gemmaLoadState.collectAsState()
     val gemmaVisionReady by viewModel.gemmaVisionReady.collectAsState()
-    val scannerModelReady = classifierLoaded == ModelLoadState.Loaded ||
-        gemmaLoaded == ModelLoadState.Loaded
+    val scannerModelReady = com.xuan.fitai.ai.canScanFood(classifierLoaded, gemmaLoaded, gemmaVisionReady)
     val isRecognizingFood = (uiState as? ScannerUiState.EditDetails)?.isRecognizing == true
 
     LaunchedEffect(classifierLoaded, gemmaLoaded, gemmaVisionReady, scannerModelReady) {
@@ -154,6 +159,7 @@ fun FoodScannerScreen(
                     Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
                         Text("授予權限")
                     }
+                    OutlinedButton(enabled = scannerModelReady, onClick = { galleryLauncher.launch("image/*") }) { Text("從相簿選取") }
                 }
             } else if (!scannerModelReady) {
                 // Models not loaded warning
@@ -172,13 +178,13 @@ fun FoodScannerScreen(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "本地辨識或 Gemma AI 模型尚未載入！",
+                        text = if (gemmaLoaded == ModelLoadState.Loading || classifierLoaded == ModelLoadState.Loading) "背景暖機中，準備完成後可開始辨識" else "請載入食物分類器或支援圖片的 Gemma 模型",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "請先前往模型設定頁面下載並載入對應的模型，才能進行本地 AI 辨識與分析。",
+                        text = "你可以先返回使用其他功能；圖片辨識需要食物分類器或 Gemma 視覺能力。",
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -264,8 +270,8 @@ fun FoodScannerScreen(
                     }
 
                     is ScannerUiState.EditDetails -> {
-                        var foodName by remember { mutableStateOf("") }
-                        var portion by remember { mutableStateOf("1份") }
+                        var foodName by rememberSaveable { mutableStateOf("") }
+                        var portion by rememberSaveable { mutableStateOf("1份") }
 
                         Column(
                             modifier = Modifier
@@ -275,6 +281,7 @@ fun FoodScannerScreen(
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
+                            photo?.let { Image(it.asImageBitmap(), "待確認的食物照片", Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(16.dp)), contentScale = ContentScale.Crop) }
                             // Title with Gemma badge if identified by vision
                             if (state.gemmaIdentified) {
                                 val detectedFoodName = GemmaOutputParser.extractVisionFoodName(state.detectedLabel)
@@ -413,9 +420,11 @@ fun FoodScannerScreen(
 
                             Spacer(modifier = Modifier.height(24.dp))
 
-                            val canAnalyze = !state.isRecognizing && foodName.isNotBlank()
+                            var useReference by rememberSaveable { mutableStateOf(true) }
+                            com.xuan.fitai.ui.components.NutritionReferenceToggle(useReference, { useReference = it }, !state.isRecognizing)
+                            val canAnalyze = !state.isRecognizing && foodName.isNotBlank() && portion.isNotBlank()
                             Button(
-                                onClick = { viewModel.analyzeWithGemma(foodName.trim(), portion) },
+                                onClick = { viewModel.analyzeWithGemma(foodName.trim(), portion, useReference) },
                                 modifier = Modifier.fillMaxWidth().height(48.dp),
                                 enabled = canAnalyze
                             ) {
@@ -444,6 +453,8 @@ fun FoodScannerScreen(
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.align(Alignment.CenterHorizontally)
                             )
+                            Text(state.status, style = MaterialTheme.typography.bodyMedium)
+                            if (state.lookupMessage.isNotBlank()) Text(state.lookupMessage, style = MaterialTheme.typography.bodySmall)
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -460,6 +471,12 @@ fun FoodScannerScreen(
 
                     is ScannerUiState.GemmaAnalysisResult -> {
                         val analysis = state.analysis
+                        var calories by rememberSaveable(state.foodName, state.portion) { mutableStateOf(analysis.calories.toString()) }
+                        var protein by rememberSaveable(state.foodName, state.portion) { mutableStateOf(analysis.protein.toString()) }
+                        var carbs by rememberSaveable(state.foodName, state.portion) { mutableStateOf(analysis.carbs.toString()) }
+                        var fat by rememberSaveable(state.foodName, state.portion) { mutableStateOf(analysis.fat.toString()) }
+                        val validNumbers = listOf(calories, protein, carbs, fat).all { it.toFloatOrNull()?.let { n -> n.isFinite() && n >= 0 } == true }
+
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -474,7 +491,15 @@ fun FoodScannerScreen(
                                 modifier = Modifier.align(Alignment.CenterHorizontally)
                             )
 
+                            com.xuan.fitai.ui.components.NutritionReferenceBadge(state.referenceJson)
+                            if (state.lookupMessage.isNotBlank()) Text(state.lookupMessage, style = MaterialTheme.typography.bodySmall)
                             // Stats Grid Card
+                            photo?.let { Image(it.asImageBitmap(), "待儲存的食物照片", Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(16.dp)), contentScale = ContentScale.Crop) }
+                            Text("AI 估算可在儲存前校正", style = MaterialTheme.typography.bodySmall)
+                            OutlinedTextField(calories, { calories = it }, label = { Text("校正熱量 kcal") }, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(protein, { protein = it }, label = { Text("校正蛋白質 g") }, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(carbs, { carbs = it }, label = { Text("校正碳水 g") }, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(fat, { fat = it }, label = { Text("校正脂肪 g") }, modifier = Modifier.fillMaxWidth())
                             Card(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
@@ -581,8 +606,9 @@ fun FoodScannerScreen(
                             Spacer(modifier = Modifier.height(24.dp))
 
                             Button(
+                                enabled = validNumbers && !saving,
                                 onClick = {
-                                    viewModel.saveMeal(state.foodName, state.portion, analysis, onSaveComplete)
+                                    viewModel.saveMeal(state.foodName, state.portion, analysis.copy(calories = calories.toFloat(), protein = protein.toFloat(), carbs = carbs.toFloat(), fat = fat.toFloat()), onSaveComplete)
                                 },
                                 modifier = Modifier.fillMaxWidth().height(48.dp)
                             ) {

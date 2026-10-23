@@ -19,6 +19,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -44,7 +46,9 @@ fun ThinkingContent(
     modifier: Modifier = Modifier,
     contentTextStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium,
     cardCornerRadius: Dp = 8.dp,
-    isGenerating: Boolean = false
+    isGenerating: Boolean = false,
+    maxLines: Int = Int.MAX_VALUE,
+    onTextLayout: (TextLayoutResult) -> Unit = {}
 ) {
     val regex = Regex("<\\|?channel\\|?>([a-zA-Z0-9_]*)")
     val matches = regex.findAll(rawText).toList()
@@ -54,7 +58,10 @@ fun ThinkingContent(
         Text(
             text = rawText,
             style = contentTextStyle,
-            modifier = modifier
+            modifier = modifier,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = onTextLayout
         )
         return
     }
@@ -191,7 +198,8 @@ fun ThinkingContent(
 
         // Main answer text
         if (contentText.isNotBlank()) {
-            Text(text = contentText, style = contentTextStyle)
+            Text(text = contentText, style = contentTextStyle, maxLines = maxLines,
+                overflow = TextOverflow.Ellipsis, onTextLayout = onTextLayout)
         }
     }
 }

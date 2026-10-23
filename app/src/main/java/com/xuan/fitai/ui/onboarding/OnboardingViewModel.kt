@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 
 import kotlinx.coroutines.flow.first
 
@@ -40,10 +41,21 @@ class OnboardingViewModel(private val userRepository: UserRepository) : ViewMode
     fun updateDietPreference(pref: String) { _profile.value = _profile.value.copy(dietPreference = pref) }
     fun updateWorkoutExperience(exp: String) { _profile.value = _profile.value.copy(workoutExperience = exp) }
 
+    val saving = MutableStateFlow(false)
+    val error = MutableStateFlow<String?>(null)
     fun saveProfile(onSuccess: () -> Unit) {
+        if (saving.value) return
+        saving.value = true
+        error.value = null
         viewModelScope.launch {
-            userRepository.saveUserProfile(_profile.value)
-            onSuccess()
+            try {
+                val profile = _profile.value
+                require(profile.age in 1..120 && profile.height.isFinite() && profile.height in 50f..300f && profile.weight.isFinite() && profile.weight in 10f..1000f)
+                userRepository.saveUserProfile(profile)
+                onSuccess()
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { error.value = "設定儲存失敗，請再試一次" }
+            finally { saving.value = false }
         }
     }
 

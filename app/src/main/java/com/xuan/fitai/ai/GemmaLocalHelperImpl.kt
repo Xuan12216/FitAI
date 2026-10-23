@@ -303,9 +303,9 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
         )
     }
 
-    override fun analyzeFoodFlow(foodName: String, portion: String, goal: String): kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.flow {
+    override fun analyzeFoodFlow(foodName: String, portion: String, goal: String, referenceData: String): kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.flow {
         val maxTokens = userPreferenceStore.maxTokensFlow.first()
-        val prompt = PromptBuilder.buildFoodAnalysisPrompt(foodName, portion, goal, maxTokens)
+        val prompt = PromptBuilder.buildFoodAnalysisPrompt(foodName, portion, goal, maxTokens, referenceData)
         generateReplyFlow(prompt).collect { emit(it) }
     }
 
@@ -651,12 +651,12 @@ class GemmaLocalHelperImpl(private val context: Context) : GemmaLocalHelper {
             topK = topK,
             topP = topP.toDouble(),
             temperature = temp.toDouble(),
-            seed = 0
+            seed = kotlin.random.Random.nextInt(1, 1_000_000)
         )
 
         val extra = mapOf<String, Any>(
             "enable_thinking" to thinking,
-            "thinking_token_budget" to (if (thinking) 256 else 0)
+            "thinking_token_budget" to (if (thinking) 512 else 0)
         )
 
         android.util.Log.d("FitAI_Diag", extra.toString())

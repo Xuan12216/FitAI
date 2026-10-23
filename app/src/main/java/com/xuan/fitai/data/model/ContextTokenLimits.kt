@@ -2,8 +2,8 @@ package com.xuan.fitai.data.model
 
 object ContextTokenLimits {
     const val MIN = 256
-    const val MAX = 32_000
-    const val DEFAULT = 1_024
+    const val MAX = 8192
+    const val DEFAULT = 4096
     val range = MIN..MAX
-    val presets = listOf(256, 512, 1024, 2000)
+    val presets = listOf(512, 1024, 2048, 4096, 8192)
 }
