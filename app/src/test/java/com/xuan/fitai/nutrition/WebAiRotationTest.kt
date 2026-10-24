@@ -55,4 +55,16 @@ class WebAiRotationTest {
         assertEquals("Brave AI", state.lastProvider)
         assertFalse(state.inFlight)
     }
+
+    @Test fun everyProviderParsesFoodWithValidSourceUrlAndIdentity() {
+        val citation = GoogleAiCitation("衛福部食藥署公開營養資料集", "https://data.gov.tw/dataset/8543")
+        for (provider in WebAiProvider.entries) {
+            val page = GoogleAiPage("火腿蛋餅每1份，熱量300kcal、蛋白質15g、碳水37g、脂肪10g", citations = listOf(citation), modelLabel = "Flash")
+            val food = GoogleAiNutritionParser.parse("火腿蛋餅", "1份", page,
+                GoogleAiNutritionSource.providerUrl(provider, "火腿蛋餅", "1份", 1), provider)
+            assertNotNull("Failed to parse food for $provider", food)
+            assertEquals(provider, food!!.webAiProvider)
+            assertTrue(food.isValid())
+        }
+    }
 }

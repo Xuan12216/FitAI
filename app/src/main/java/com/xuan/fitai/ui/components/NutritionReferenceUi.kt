@@ -37,7 +37,7 @@ fun NutritionReferenceToggle(enabled: Boolean, onChange: (Boolean) -> Unit, inte
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1f)) {
             Text("營養資料輔助", style = MaterialTheme.typography.titleSmall)
-            Text("Google AI、Brave AI、Duck.ai 隨機輪替，實際查詢不連續選同一家；自動最多 3 次，失敗再以台灣資料及本地 Gemma 估算。僅查詢餐點名稱與份量，不會上傳照片或個人檔案。",
+            Text("Google AI、Gemini、ChatGPT、Brave AI、Duck.ai 隨機輪替，實際查詢不連續選同一家；自動最多 3 次，失敗再以台灣資料及本地 Gemma 估算。僅查詢餐點名稱與份量，不會上傳照片或個人檔案。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(enabled, onChange, enabled = interactive)

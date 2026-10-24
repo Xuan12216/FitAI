@@ -87,4 +87,37 @@ class NutritionParserRegressionTest {
             GoogleAiNutritionSource.searchUrl(name, "1份", 1))!!.calories)
     }
 
+    @Test fun markdownPipeTableAndSinglePipeRowAreParsedCleanly() {
+        val mdTable = """
+            | 餐點 | 基準 | 熱量kcal | 蛋白質g | 碳水g | 脂肪g |
+            |---|---|---|---|---|---|
+            | 卡拉雞漢堡 | 1份 | 520 | 22 | 45 | 28 |
+            類型：配方估算；假設：卡拉雞排100g、漢堡麵包65g、生菜20g、美乃滋15g。
+        """.trimIndent()
+        val parsedTable = GoogleAiNutritionParser.parse("卡拉雞漢堡", "1份",
+            GoogleAiPage(mdTable, citations = listOf(citation)),
+            GoogleAiNutritionSource.searchUrl("卡拉雞漢堡", "1份", 1))!!
+        assertEquals(520f, parsedTable.calories)
+        assertEquals(22f, parsedTable.protein)
+
+        val singleRow = "| 卡拉雞漢堡 | 1份 | 520kcal | 22g | 45g | 28g |\n類型：配方估算\n假設：卡拉雞排100g、漢堡麵包65g。"
+        val parsedSingle = GoogleAiNutritionParser.parse("卡拉雞漢堡", "1份",
+            GoogleAiPage(singleRow, citations = listOf(citation)),
+            GoogleAiNutritionSource.searchUrl("卡拉雞漢堡", "1份", 1))!!
+        assertEquals(520f, parsedSingle.calories)
+        assertEquals(28f, parsedSingle.fat)
+    }
+
+    @Test fun trailingCitationCardNoiseAfterDisclaimerDoesNotBreakProseParser() {
+        val noisy = """
+            火腿蛋餅、每份141g、294kcal、蛋白質15g、碳水37g、脂肪10g。來源：天主教聖馬爾定醫院
+            如需查詢其他餐點的營養數值，請告訴我。
+            AI 可能會出錯，請查證回覆內容
+            聖馬爾定醫院 常用中式食物熱量及營養成份表：每100g 熱量 250大卡、蛋白質 12克
+        """.trimIndent()
+        val food = parse(noisy)!!
+        assertEquals(294f, food.calories)
+        assertEquals(15f, food.protein)
+    }
+
 }

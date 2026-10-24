@@ -28,7 +28,8 @@ object NutritionReferenceJson {
     fun decode(raw: String): NutritionReference {
         require(raw.length <= 8000)
         val o = JSONObject(raw)
-        require(o.getString("provider") in setOf("tfda", "google-ai", "brave-ai", "duck-ai"))
+        val validProviders = setOf("tfda") + WebAiProvider.entries.map { "${it.name.lowercase()}-ai" }
+        require(o.getString("provider") in validProviders)
         val time = o.getLong("fetchedAt"); require(time > 0)
         val a = o.getJSONArray("foods"); require(a.length() in 1..5)
         val foods = (0 until a.length()).map { foodFromJson(a.getJSONObject(it)) }

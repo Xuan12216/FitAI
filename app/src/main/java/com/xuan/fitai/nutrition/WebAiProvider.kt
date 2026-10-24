@@ -4,13 +4,19 @@ import java.net.URI
 import kotlin.random.Random
 
 enum class WebAiProvider(val label: String, val foodId: String) {
-    GOOGLE("Google AI", "GOOGLE-AI-1"), BRAVE("Brave AI", "BRAVE-AI-1"), DUCK("Duck.ai", "DUCK-AI-1");
+    GOOGLE("Google AI", "GOOGLE-AI-1"),
+    GEMINI("Gemini", "GEMINI-AI-1"),
+    CHATGPT("ChatGPT", "CHATGPT-AI-1"),
+    BRAVE("Brave AI", "BRAVE-AI-1"),
+    DUCK("Duck.ai", "DUCK-AI-1");
     companion object {
         fun fromUrl(url: String): WebAiProvider? = runCatching {
             val uri = URI(url)
             if (uri.scheme != "https" || uri.userInfo != null || uri.port != -1 || url.length > 1800) return null
             when {
                 isGoogleAiSearchUrl(url) -> GOOGLE
+                uri.host == "gemini.google.com" && uri.path in listOf("", "/", "/app") -> GEMINI
+                uri.host == "chatgpt.com" && uri.path in listOf("", "/") -> CHATGPT
                 uri.host == "search.brave.com" && uri.path == "/ask" -> BRAVE
                 uri.host == "duck.ai" && uri.path in listOf("", "/") -> DUCK
                 else -> null
@@ -44,6 +50,6 @@ fun nutritionEstimatorLabel(raw: String?, estimated: Boolean): String? {
     val reference = NutritionReferenceJson.decodeOrNull(raw)
     val food = reference?.foods?.firstOrNull { it.id == reference.selectedFoodId } ?: reference?.foods?.firstOrNull()
     return food?.webAiProvider?.let { provider ->
-        if (provider == WebAiProvider.DUCK && food.category.startsWith("Duck.ai / ")) food.category else provider.label
+        if (food.category.startsWith("${provider.label} / ")) food.category else provider.label
     } ?: "本地 Gemma"
 }

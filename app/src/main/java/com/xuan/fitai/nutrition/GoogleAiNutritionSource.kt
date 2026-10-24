@@ -115,9 +115,14 @@ class GoogleAiNutritionSource(
 
     companion object {
         internal fun providerUrl(provider: WebAiProvider, name: String, basis: String, attempt: Int): String {
-            if (provider == WebAiProvider.GOOGLE) return searchUrl(name, basis, attempt)
-            return (if (provider == WebAiProvider.BRAVE) "https://search.brave.com/ask?source=llmSuggest&q=" else "https://duck.ai/?q=") +
-                URLEncoder.encode(quickQuery(name, basis, attempt), "UTF-8")
+            val base = when (provider) {
+                WebAiProvider.GOOGLE -> return searchUrl(name, basis, attempt)
+                WebAiProvider.GEMINI -> "https://gemini.google.com/app?q="
+                WebAiProvider.CHATGPT -> "https://chatgpt.com/?q="
+                WebAiProvider.BRAVE -> "https://search.brave.com/ask?source=llmSuggest&q="
+                WebAiProvider.DUCK -> "https://duck.ai/?q="
+            }
+            return base + URLEncoder.encode(quickQuery(name, basis, attempt), "UTF-8")
         }
         internal fun searchUrl(name: String, basis: String, attempt: Int): String =
             "https://www.google.com/search?udm=50&hl=zh-TW&q=" + URLEncoder.encode(quickQuery(name, basis, attempt), "UTF-8")
@@ -184,26 +189,64 @@ object GoogleAiNutritionParser {
     fun recipeDetails(page: GoogleAiPage): RecipeDetails {
         val estimated = Regex("(?:類型|类型)\\s*[:：]?\\s*配方估算|(?:^|\\n)\\s*配方估算[：:(（]", RegexOption.IGNORE_CASE)
             .containsMatchIn(page.text)
-        val assumption = if (estimated) Regex("假[設设]\\s*[:：]?\\s*([^\\n]{1,500})").find(page.text)?.groupValues?.get(1)
-            ?.substringBefore("https://")?.substringBefore("來源")?.trim(' ', '；', ';')?.take(300)
+        val assumption = if (estimated) Regex("假[設设]\\s*[:：]?\\s*([^\\n]{1,500}(?:\\n(?!(?:類型|类型|來源|http))[^\\n]{1,200})?)")
+            .find(page.text)?.groupValues?.get(1)
+            ?.replace('\n', ' ')
+            ?.substringBefore("https://")?.substringBefore("來源")?.substringBefore("AI 可能會出錯")
+            ?.trim(' ', '；', ';')?.take(300)
             ?.takeIf { Regex("\\d+(?:\\.\\d+)?\\s*(?:kg|g|公斤|公克|克)", RegexOption.IGNORE_CASE).containsMatchIn(it) }
             else null
         return RecipeDetails(estimated, assumption)
     }
 
-    /** Some public answers render a single CSV row as text instead of an HTML table.
-     * Accept only an unquoted, complete header/row pair; ambiguous CSV stays rejected. */
-    private fun inlineTextTables(text: String): List<List<List<String>>> = text.lineSequence().take(80)
-        .map(String::trim).filter { it.isNotEmpty() }.toList().zipWithNext().mapNotNull { (head, row) ->
+    /** Some public answers render a single CSV or Markdown pipe table as text instead of an HTML table.
+     * Accept only an unquoted, complete header/row pair (or explicit 6-column pipe row); ambiguous CSV stays rejected. */
+    private fun inlineTextTables(text: String): List<List<List<String>>> {
+        val lines = text.lineSequence().take(80).map(String::trim)
+            .filter { it.isNotEmpty() && !Regex("^[|｜\\s:+-]+$").matches(it) }.toList()
+        val paired = lines.zipWithNext().mapNotNull { (head, row) ->
             if ('"' in head || '"' in row) return@mapNotNull null
-            val headers = head.split(',').map(String::trim)
-            val values = row.split(',').map(String::trim)
+            val headers: List<String>
+            val values: List<String>
+            if (('|' in head || '｜' in head) && ('|' in row || '｜' in row)) {
+                headers = head.trim('|', '｜', ' ').split(Regex("[|｜]")).map(String::trim)
+                values = row.trim('|', '｜', ' ').split(Regex("[|｜]")).map(String::trim)
+            } else {
+                headers = head.split(',').map(String::trim)
+                values = row.split(',').map(String::trim)
+            }
             if (headers.size !in 2..8 || values.size != headers.size) null else listOf(headers, values)
         }
+        val singlePipeRows = lines.mapNotNull { line ->
+            if ('|' !in line && '｜' !in line) return@mapNotNull null
+            val cells = line.trim('|', '｜', ' ').split(Regex("[|｜]")).map(String::trim)
+            if (cells.size == 6 &&
+                Regex("(?:kcal|大卡|千卡)", RegexOption.IGNORE_CASE).containsMatchIn(cells[2]) &&
+                cells.subList(3, 6).all { c -> Regex("(?:公克|克|g)", RegexOption.IGNORE_CASE).containsMatchIn(c) && !c.contains("飽和") && !c.contains("反式") }
+            ) {
+                listOf(listOf("餐點", "基準", "熱量kcal", "蛋白質g", "碳水g", "脂肪g"), cells)
+            } else null
+        }
+        return paired + singlePipeRows
+    }
 
     private fun hasExplicitBasis(text: String): Boolean =
         Regex("(?:每(?:\\d+(?:\\.\\d+)?|[一二三四五六七八九十百兩两]+)?|\\d+(?:\\.\\d+)?|[一二三四五六七八九十百兩两]+)(?:g|公克|克|份|個|片|碗|包|杯)")
             .containsMatchIn(normalized(text).lowercase())
+
+    private fun extractProseNutrients(chunk: String): List<Float>? {
+        val primary = normalized(chunk)
+        if (Regex("比較|对比|對比|對照|相比|相較|versus|\\bvs\\b", RegexOption.IGNORE_CASE).containsMatchIn(primary)) return null
+        val energy = Regex("${number.pattern}\\s*(?:大卡|千卡|kcal)", RegexOption.IGNORE_CASE)
+            .findAll(primary).toList().singleOrNull()?.let { value(it.value) }
+        val labels = listOf("(?:蛋白質|蛋白质)", "(?:碳水化合物(?:[（(]醣類[）)])?|碳水|醣類)",
+            "(?<!飽和)(?<!饱和)(?<!反式)(?:總脂肪|总脂肪|脂肪)")
+        val macros = labels.map { label ->
+            Regex("$label\\s*[：:]?\\s*${number.pattern}\\s*(?:公克|克|g)", RegexOption.IGNORE_CASE)
+                .findAll(primary).toList().singleOrNull()?.let { value(it.value) }
+        }
+        return if (energy != null && macros.all { it != null }) listOf(energy) + macros.filterNotNull() else null
+    }
 
     fun parse(name: String, basis: String, page: GoogleAiPage, sourceUrl: String, provider: WebAiProvider = WebAiProvider.GOOGLE): NutritionFood? {
         if (provider == WebAiProvider.DUCK && page.modelLabel.isNullOrBlank()) return null
@@ -212,7 +255,14 @@ object GoogleAiNutritionParser {
         if (recipe.estimated && recipe.assumption == null) return null
         val key = WebNutritionScraper.normalizeQuery(name)
         if (!WebNutritionScraper.normalizeQuery(page.text.take(500)).contains(key)) return null
-        val intro = page.text.take(500)
+        val cleanText = page.text
+            .substringBefore("\n類型").substringBefore("\n类型")
+            .substringBefore("類型:").substringBefore("類型：")
+            .substringBefore("类型:").substringBefore("类型：")
+            .substringBefore("\n假設").substringBefore("\n假设")
+            .substringBefore("AI 可能會出錯").substringBefore("如需查詢其他").substringBefore("如果您需要查詢")
+            .ifBlank { page.text }
+        val intro = cleanText.take(500)
         // Nutrient grams are not declarations of the food's serving basis.
         val nutrientStart = Regex("(?:熱量|卡路里|蛋白質|蛋白质|碳水|醣類|總脂肪|脂肪)(?=\\s*[：:]?\\s*(?:約|大約|~|～)?\\s*\\p{N})").find(intro)?.range?.first ?: intro.length
         val basisIntro = intro.take(nutrientStart)
@@ -220,7 +270,7 @@ object GoogleAiNutritionParser {
             else Regex("(?<![\\d.])100(?:\\.0+)?(?:g|公克|克)(?![a-z])")
                 .containsMatchIn(normalized(basisIntro).lowercase())
         var nutrients: List<Float>? = null
-        for (table in page.tables + inlineTextTables(page.text)) {
+        for (table in page.tables + inlineTextTables(cleanText)) {
             val header = table.firstOrNull()?.map(::normalized) ?: continue
             // Google also renders vertical nutrient tables with one column per serving basis.
             val basisColumn = header.indexOfFirst { declaresBasis(it, basis) }.takeIf { it > 0 }
@@ -238,7 +288,14 @@ object GoogleAiNutritionParser {
             val columns = listOf(column("熱量", "卡路里", "kcal"), column("蛋白質", "蛋白质"), column("碳水", "醣類"),
                 header.indexOfFirst { (it.contains("脂肪") && !it.contains("飽和") && !it.contains("反式")) })
             if (columns.any { it < 0 }) continue
-            val row = table.drop(1).firstOrNull { cells -> cells.any { WebNutritionScraper.normalizeQuery(it) == key } } ?: continue
+            val dataRows = table.drop(1)
+            val row = dataRows.firstOrNull { cells -> cells.any { WebNutritionScraper.normalizeQuery(it) == key } }
+                ?: dataRows.singleOrNull()?.takeIf { cells ->
+                    cells.any {
+                        val normCell = WebNutritionScraper.normalizeQuery(it).replace(Regex("[（(].*?[）)]"), "")
+                        normCell == key
+                    }
+                } ?: continue
             val unitColumn = column("基準", "基准", "份量", "食用量")
             val unitText = if (unitColumn in row.indices) row[unitColumn] else header.joinToString(" ") + basisIntro
             if (!declaresBasis(unitText, basis)) continue
@@ -250,28 +307,30 @@ object GoogleAiNutritionParser {
         }
         if (nutrients == null && declaresBasis(basisIntro, basis) && !ambiguousBasis) {
             // Google sometimes renders each digit/unit in a separate block (1\n6\n7\nk\nc\na\nl).
-            val primary = normalized(page.text.substringBefore("比較表").take(900))
-            // A prose comparison has no reliable row/column association. Require one complete
-            // nutrient block; never assemble values across different dishes or serving records.
-            if (Regex("比較|对比|對比|對照|相比|相較|versus|\\bvs\\b", RegexOption.IGNORE_CASE).containsMatchIn(primary)) return null
-            val energy = Regex("${number.pattern}\\s*(?:大卡|千卡|kcal)", RegexOption.IGNORE_CASE)
-                .findAll(primary).toList().singleOrNull()?.let { value(it.value) }
-            val labels = listOf("(?:蛋白質|蛋白质)", "(?:碳水化合物(?:[（(]醣類[）)])?|碳水|醣類)",
-                "(?<!飽和)(?<!饱和)(?<!反式)(?:總脂肪|总脂肪|脂肪)")
-            val macros = labels.map { label ->
-                Regex("$label\\s*[：:]?\\s*${number.pattern}\\s*(?:公克|克|g)", RegexOption.IGNORE_CASE)
-                    .findAll(primary).toList().singleOrNull()?.let { value(it.value) }
-            }
-            if (energy != null && macros.all { it != null }) nutrients = listOf(energy) + macros.filterNotNull()
+            val primaryChunk = cleanText.substringBefore("比較表").take(900)
+            nutrients = extractProseNutrients(primaryChunk)
+                ?: primaryChunk.lineSequence().firstOrNull { it.isNotBlank() && WebNutritionScraper.normalizeQuery(it).contains(key) }
+                    ?.let(::extractProseNutrients)
         }
         val values = nutrients ?: return null
         val energy = values[1] * 4 + values[2] * 4 + values[3] * 9
         if (values[0] > 20 && energy !in values[0] * 0.5f..values[0] * 1.8f) return null
         if (values[0] <= 20 && energy > 50) return null
+        val categoryLabel = when {
+            provider in setOf(WebAiProvider.DUCK, WebAiProvider.GEMINI, WebAiProvider.CHATGPT) && !page.modelLabel.isNullOrBlank() ->
+                "${provider.label} / ${page.modelLabel}"
+            else -> provider.label
+        }.take(40)
+        val cleanSourceUrl = when (provider) {
+            WebAiProvider.DUCK -> "https://duck.ai/"
+            WebAiProvider.GEMINI -> "https://gemini.google.com/app"
+            WebAiProvider.CHATGPT -> "https://chatgpt.com/"
+            else -> sourceUrl
+        }
         return NutritionFood(provider.foodId, name.trim(), "",
             (if (recipe.estimated) "【${provider.label} 配方估算】每$basis；假設：${recipe.assumption}。非完整營養標示。" else
                 "【${provider.label} 估算】每$basis；非官方營養標示。來源若提供區間，顯示區間中值；實際配方與份量可能不同。").take(400),
-            values[0], values[1], values[2], values[3], (if (provider == WebAiProvider.DUCK && page.modelLabel != null) "Duck.ai / ${page.modelLabel}" else provider.label).take(40),
-            if (provider == WebAiProvider.DUCK) "https://duck.ai/" else sourceUrl, servingLabel = basis).takeIf { it.isValid() }
+            values[0], values[1], values[2], values[3], categoryLabel,
+            cleanSourceUrl, servingLabel = basis).takeIf { it.isValid() }
     }
 }
