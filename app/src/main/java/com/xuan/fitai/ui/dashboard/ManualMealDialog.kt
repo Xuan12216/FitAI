@@ -77,7 +77,7 @@ internal fun ManualMealDialog(
     val history by viewModel.mealHistory.collectAsState()
     var isAiAnalyzing by remember { mutableStateOf(false) }
     var aiErrorMsg by remember { mutableStateOf<String?>(null) }
-    var aiReasoning by remember { mutableStateOf("") }
+    var aiReasoning by remember { mutableStateOf(initial?.aiAdvice.orEmpty()) }
     var useReference by rememberSaveable { mutableStateOf(true) }
     var referenceJson by rememberSaveable { mutableStateOf(initial?.nutritionReferenceJson) }
     var aiEstimated by rememberSaveable { mutableStateOf(initial?.isAiEstimated ?: false) }
@@ -158,17 +158,16 @@ internal fun ManualMealDialog(
         dragHandle = { BottomSheetDefaults.DragHandle() }
     ) {
         Column(
-            verticalArrangement = Arrangement.spacedBy(14.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 28.dp)
                 .navigationBarsPadding()
         ) {
-            // Header + Favorite Toggle
+            // Sticky Header + Favorite Toggle
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -194,6 +193,17 @@ internal fun ManualMealDialog(
                     label = { Text("常用餐點") }
                 )
             }
+
+            // Scrollable Body
+            Column(
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 12.dp)
+            ) {
 
             // Quick Template Picker
             val templates = remember(history) {
@@ -258,7 +268,7 @@ internal fun ManualMealDialog(
                                             aiEstimated = meal.isAiEstimated
                                             savedAdvice = meal.aiAdvice
                                             lookupMessage = ""
-                                            aiReasoning = ""
+                                            aiReasoning = meal.aiAdvice.orEmpty()
                                         },
                                         label = {
                                             Text("${if (meal.isFavorite) "★ " else ""}${meal.name} (${meal.portionSize})")
@@ -300,11 +310,6 @@ internal fun ManualMealDialog(
                 }
             }
 
-            AssistChip(
-                onClick = { automaticType = true; type = com.xuan.fitai.data.model.MealPeriod.forHour(hour) },
-                label = { Text(if (automaticType) "依時間自動分類 · $type" else "自訂餐別 · 點此恢復自動") },
-                leadingIcon = { Icon(Icons.Default.Schedule, null, Modifier.size(16.dp)) }
-            )
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -396,7 +401,7 @@ internal fun ManualMealDialog(
                         }
                     }
 
-                    if (lookupMessage.isNotBlank()) {
+                    if (lookupMessage.isNotBlank() && (canRetryGoogle || referenceJson == null)) {
                         Text(
                             text = lookupMessage,
                             style = MaterialTheme.typography.bodySmall,
@@ -408,10 +413,10 @@ internal fun ManualMealDialog(
                             enabled = !isAiAnalyzing, modifier = Modifier.fillMaxWidth()) {
                             Text("再查一次網路 AI")
                         }
-                        Text("只追加 1 次查詢；若未取得可用回答，保留原有數值。", style = MaterialTheme.typography.bodySmall)
                     }
-                    if (useReference) com.xuan.fitai.ui.components.GoogleAiTrafficStatus()
-                    if (aiEstimated) Text("估算 AI：${com.xuan.fitai.nutrition.nutritionEstimatorLabel(referenceJson, true)}", style = MaterialTheme.typography.labelMedium)
+                    if (aiEstimated && referenceJson == null) {
+                        Text("估算 AI：${com.xuan.fitai.nutrition.nutritionEstimatorLabel(referenceJson, true)}", style = MaterialTheme.typography.labelMedium)
+                    }
                     NutritionReferenceBadge(referenceJson)
 
                     if (aiErrorMsg != null) {
@@ -500,11 +505,14 @@ internal fun ManualMealDialog(
                 )
             }
 
-            // Bottom Action Row
+            }
+
+            // Sticky Bottom Action Row
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp),
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedButton(

@@ -120,4 +120,22 @@ class NutritionParserRegressionTest {
         assertEquals(15f, food.protein)
     }
 
+    @Test fun dumplingPieceUnitsParseAndScaleProperly() {
+        val basis = GoogleAiNutritionParser.basisForPortion("5顆")
+        assertEquals("1顆", basis)
+        val page = GoogleAiPage("| 餐點 | 基準 | 熱量kcal | 蛋白質g | 碳水g | 脂肪g |\n| 水餃 | 1顆 | 55kcal | 2.5g | 6g | 2.2g |",
+            citations = listOf(citation))
+        val food = GoogleAiNutritionParser.parse("水餃", basis!!, page,
+            GoogleAiNutritionSource.searchUrl("水餃", basis, 1))!!
+        assertEquals("1顆", food.servingLabel)
+        assertEquals(55f, food.calories)
+        val scaled = NutritionPortionCalculator.apply(
+            com.xuan.fitai.ai.GemmaFoodAnalysis(55f, 2.5f, 6f, 2.2f, true, "建議", "依據", referenceFoodId = food.id),
+            NutritionReference(1000L, false, listOf(food), food.id),
+            "5顆"
+        )
+        assertEquals(275f, scaled.calories, 0.01f)
+        assertEquals(12.5f, scaled.protein, 0.01f)
+    }
+
 }

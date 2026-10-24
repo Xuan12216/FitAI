@@ -501,10 +501,13 @@ fun FoodScannerScreen(
                                 modifier = Modifier.align(Alignment.CenterHorizontally)
                             )
 
-                            Text("估算 AI：${com.xuan.fitai.nutrition.nutritionEstimatorLabel(state.referenceJson, true)}", style = MaterialTheme.typography.labelMedium)
+                            if (state.referenceJson == null) {
+                                Text("估算 AI：${com.xuan.fitai.nutrition.nutritionEstimatorLabel(state.referenceJson, true)}", style = MaterialTheme.typography.labelMedium)
+                            }
                             com.xuan.fitai.ui.components.NutritionReferenceBadge(state.referenceJson)
-                            if (state.lookupMessage.isNotBlank()) Text(state.lookupMessage, style = MaterialTheme.typography.bodySmall)
-                            com.xuan.fitai.ui.components.GoogleAiTrafficStatus()
+                            if (state.lookupMessage.isNotBlank() && (state.canRetryGoogle || state.referenceJson == null)) {
+                                Text(state.lookupMessage, style = MaterialTheme.typography.bodySmall)
+                            }
                             if (state.canRetryGoogle) {
                                 OutlinedButton(
                                     onClick = { viewModel.analyzeWithGemma(state.foodName, state.portion, googleRetry = true) },
@@ -512,9 +515,19 @@ fun FoodScannerScreen(
                                     modifier = Modifier.fillMaxWidth()
                                 ) { Text(if (state.retryingGoogle) "網路 AI 再查一次…" else "再查一次網路 AI") }
                             }
-                            // Stats Grid Card
                             photo?.let { Image(it.asImageBitmap(), "待儲存的食物照片", Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(16.dp)), contentScale = ContentScale.Crop) }
-                            Text("AI 估算可在儲存前校正", style = MaterialTheme.typography.bodySmall)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${state.foodName} (${state.portion})",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text("儲存前可微調數值", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -561,51 +574,19 @@ fun FoodScannerScreen(
                                     modifier = Modifier.weight(1f)
                                 )
                             }
-                            Card(
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Text(
-                                        text = "${state.foodName} (${state.portion})",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Spacer(modifier = Modifier.height(12.dp))
+                            val fromGoogle = com.xuan.fitai.nutrition.NutritionReferenceJson.decodeOrNull(state.referenceJson)?.foods?.any { com.xuan.fitai.nutrition.WebAiProvider.entries.any { provider -> provider.foodId == it.id } } == true
+                            if (!fromGoogle) {
+                                Card(modifier = Modifier.fillMaxWidth()) {
                                     Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
+                                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        val displayCalories = (calories.toFloatOrNull() ?: analysis.calories).toInt()
-                                        val displayProtein = (protein.toFloatOrNull() ?: analysis.protein).toInt()
-                                        val displayCarbs = (carbs.toFloatOrNull() ?: analysis.carbs).toInt()
-                                        val displayFat = (fat.toFloatOrNull() ?: analysis.fat).toInt()
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Text("熱量", style = MaterialTheme.typography.bodySmall)
-                                            Text("$displayCalories kcal", fontWeight = FontWeight.Bold)
-                                        }
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Text("蛋白質", style = MaterialTheme.typography.bodySmall)
-                                            Text("$displayProtein g", fontWeight = FontWeight.Bold)
-                                        }
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Text("碳水", style = MaterialTheme.typography.bodySmall)
-                                            Text("$displayCarbs g", fontWeight = FontWeight.Bold)
-                                        }
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Text("脂肪", style = MaterialTheme.typography.bodySmall)
-                                            Text("$displayFat g", fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                    
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    
-                                    val fromGoogle = com.xuan.fitai.nutrition.NutritionReferenceJson.decodeOrNull(state.referenceJson)?.foods?.any { com.xuan.fitai.nutrition.WebAiProvider.entries.any { provider -> provider.foodId == it.id } } == true
-                                    if (!fromGoogle) {
                                         val suitabilityText = if (analysis.isSuitable) "適合" else "較不適合"
                                         val suitabilityColor = if (analysis.isSuitable) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
                                         Text(
                                             text = "適合您的目標「${userProfile.goal}」嗎？",
-                                            style = MaterialTheme.typography.bodySmall
+                                            style = MaterialTheme.typography.bodyMedium
                                         )
                                         Text(
                                             text = suitabilityText,
@@ -613,7 +594,7 @@ fun FoodScannerScreen(
                                             fontWeight = FontWeight.Bold,
                                             color = suitabilityColor
                                         )
-                                    } else Text("網路 AI 提供營養估算，尚未評估個人目標適合度。", style = MaterialTheme.typography.bodySmall)
+                                    }
                                 }
                             }
 

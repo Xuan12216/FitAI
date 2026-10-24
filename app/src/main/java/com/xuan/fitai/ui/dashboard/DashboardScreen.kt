@@ -486,8 +486,16 @@ private fun MealLogCard(
                     val time = Instant.ofEpochMilli(meal.timestamp)
                         .atZone(ZoneId.systemDefault())
                         .format(DateTimeFormatter.ofPattern("HH:mm"))
+                    val hasRefBadge = remember(meal.nutritionReferenceJson) {
+                        com.xuan.fitai.nutrition.NutritionReferenceJson.decodeOrNull(meal.nutritionReferenceJson) != null
+                    }
+                    val sourceSubtext = when {
+                        hasRefBadge -> ""
+                        meal.isAiEstimated -> " · ${com.xuan.fitai.nutrition.nutritionEstimatorLabel(meal.nutritionReferenceJson, true)} 估算"
+                        else -> " · 手動記錄"
+                    }
                     Text(
-                        text = "$time · ${meal.portionSize} · ${if (meal.isAiEstimated) "${com.xuan.fitai.nutrition.nutritionEstimatorLabel(meal.nutritionReferenceJson, true)} 估算" else "手動記錄"}",
+                        text = "$time · ${meal.portionSize}$sourceSubtext",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

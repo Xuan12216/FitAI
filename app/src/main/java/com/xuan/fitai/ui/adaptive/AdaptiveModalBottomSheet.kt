@@ -6,8 +6,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.window.layout.FoldingFeature
 
@@ -37,11 +39,20 @@ internal fun sheetPane(width: Int, height: Int, hinge: SheetPane, vertical: Bool
 fun AdaptiveModalBottomSheet(
     onDismissRequest: () -> Unit,
     sheetState: SheetState,
+    sheetMaxWidth: Dp = 500.dp,
+    maxHeightFraction: Float = 0.8f,
     containerColor: Color = MaterialTheme.colorScheme.surface,
     dragHandle: @Composable (() -> Unit)? = { BottomSheetDefaults.DragHandle() },
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val fold = LocalAdaptiveInfo.current.folds.firstOrNull { it.isSeparating }
+    val info = LocalAdaptiveInfo.current
+    val fold = info.folds.firstOrNull {
+        it.isSeparating && it.occlusionType == FoldingFeature.OcclusionType.FULL
+    }
+    val configuration = LocalConfiguration.current
+    val windowHeight = if (info.height > 0.dp) info.height else configuration.screenHeightDp.dp
+    val maxContentHeight = (windowHeight * maxHeightFraction - if (dragHandle != null) 36.dp else 0.dp)
+        .coerceAtLeast(240.dp)
     val density = LocalDensity.current
     val keyboard = WindowInsets.ime.getBottom(density)
     val gap = with(density) { 12.dp.roundToPx() }
@@ -59,6 +70,7 @@ fun AdaptiveModalBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
+        sheetMaxWidth = if (fold != null) BottomSheetDefaults.SheetMaxWidth else sheetMaxWidth,
         modifier = modifier,
         containerColor = containerColor,
         dragHandle = dragHandle,
@@ -67,6 +79,17 @@ fun AdaptiveModalBottomSheet(
             if (fold != null) WindowInsets.systemBars.union(WindowInsets.displayCutout)
             else BottomSheetDefaults.modalWindowInsets
         },
-        content = content,
+        content = {
+            if (fold != null) {
+                content()
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = maxContentHeight),
+                    content = content
+                )
+            }
+        },
     )
 }

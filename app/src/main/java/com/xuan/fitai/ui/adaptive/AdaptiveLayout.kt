@@ -50,7 +50,7 @@ fun AdaptivePanes(primary: @Composable () -> Unit, secondary: @Composable () -> 
     var originX by remember { mutableFloatStateOf(0f) }
     var originY by remember { mutableFloatStateOf(0f) }
     BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { originX = it.positionInWindow().x; originY = it.positionInWindow().y }) {
-        val separating = info.folds.firstOrNull { it.isSeparating }
+        val separating = info.folds.firstOrNull { it.isSeparating && it.occlusionType == FoldingFeature.OcclusionType.FULL }
         val vertical = separating?.takeIf { it.orientation == FoldingFeature.Orientation.VERTICAL }
         val horizontal = separating?.takeIf { it.orientation == FoldingFeature.Orientation.HORIZONTAL }
         val hingeLeft = with(density) { ((vertical?.bounds?.left ?: 0) - originX).toDp() }
@@ -86,7 +86,7 @@ fun AdaptiveContent(maxWidth: Dp = 840.dp, content: @Composable () -> Unit) {
     BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned {
         originX = it.positionInWindow().x; originY = it.positionInWindow().y
     }) {
-        val fold = info.folds.firstOrNull { it.isSeparating }
+        val fold = info.folds.firstOrNull { it.isSeparating && it.occlusionType == FoldingFeature.OcclusionType.FULL }
         var start = 0.dp; var end = 0.dp; var top = 0.dp; var bottom = 0.dp
         if (fold != null) {
             if (fold.orientation == FoldingFeature.Orientation.VERTICAL) {
@@ -111,7 +111,7 @@ fun AdaptiveDialogPlacement() {
     val info = LocalAdaptiveInfo.current
     val density = LocalDensity.current
     val view = androidx.compose.ui.platform.LocalView.current
-    val fold = info.folds.firstOrNull { it.isSeparating }
+    val fold = info.folds.firstOrNull { it.isSeparating && it.occlusionType == FoldingFeature.OcclusionType.FULL }
     DisposableEffect(view, fold, info.width, info.height) {
         val window = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
         if (window != null && fold != null) {

@@ -8,6 +8,11 @@ const val TFDA_DOWNLOAD_URL = "https://data.fda.gov.tw/data/opendata/export/20/o
 const val NTU_BREAKFAST_URL = "https://meals.ntu.edu.tw/CampusDining/kcal/breakfast"
 val NTU_MEAL_SOURCE_URLS = setOf("breakfast", "kcal2", "kcal", "rice", "soup")
     .map { "https://meals.ntu.edu.tw/CampusDining/kcal/$it" }.toSet()
+val SUPPORTED_SERVING_UNITS = setOf("份", "個", "顆", "粒", "片", "碗", "包", "杯", "塊", "條", "支", "串", "盤", "盒", "罐", "瓶")
+val SUPPORTED_SERVING_LABELS = setOf("100g") + SUPPORTED_SERVING_UNITS.map { "1$it" }
+
+fun normalizeServingUnit(unit: String): String = unit
+    .replace("个", "個").replace("颗", "顆").replace("块", "塊").replace("条", "條").replace("盘", "盤")
 
 data class NutritionFood(
     val id: String,
@@ -25,7 +30,7 @@ data class NutritionFood(
 ) {
     val isPer100g: Boolean get() = servingLabel == "100g"
     fun isValid() = id.length in 1..40 && name.length in 1..100 && aliases.length <= 500 && description.length <= 400 && category.length <= 40 &&
-        servingLabel in setOf("100g", "1份", "1個", "1片", "1碗", "1包", "1杯") &&
+        servingLabel in SUPPORTED_SERVING_LABELS &&
         listOf(calories, protein, carbs, fat).all { it.isFinite() && it >= 0 } &&
         calories <= (if (isPer100g) 1000 else 5000) &&
         listOf(protein, carbs, fat).all { it <= if (isPer100g) 100 else 500 } &&

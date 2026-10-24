@@ -220,7 +220,7 @@ class GoogleAiPageLoader(context: Context) : GoogleAiPageSource {
               const failure = !main && /登入以使用 AI 模式|Sign in to use AI Mode/.test(body) ? 'Google AI 模式要求登入。' : null;
               if (!main) return JSON.stringify({text:'',tables:[],citations:[],blocked,failure});
               const tables = Array.from(main.querySelectorAll('table')).slice(0,5).map(t => Array.from(t.rows).slice(0,25).map(r => Array.from(r.cells).slice(0,8).map(c => c.innerText.slice(0,160))));
-              const citations = Array.from(main.querySelectorAll('a[href]')).map(a => ({title:(a.getAttribute('aria-label')||a.innerText||a.title||'參考來源').slice(0,100),url:a.href})).filter(a => a.url.startsWith('https://') && a.url.length <= 1000).slice(0,8);
+              const citations = Array.from(main.querySelectorAll('a[href]')).map(a => ({title:([a.getAttribute('aria-label'),a.innerText,a.title].map(s=>(s||'').replace(/\s+/g,' ').trim()).find(Boolean)||a.hostname||'參考來源').slice(0,100),url:a.href})).filter(a => a.url.startsWith('https://') && a.url.length <= 1000).slice(0,8);
               for (const url of (main.innerText.match(/https:\/\/[^\s<>"'）)，,；;]+/g)||[]).slice(0,3)) {
                 if (!citations.some(c=>c.url===url)) citations.push({title:'AI 列出之來源',url});
               }
@@ -238,7 +238,7 @@ class GoogleAiPageLoader(context: Context) : GoogleAiPageSource {
               const main = document.querySelector('.message.assistant.llm-output');
               if (!main) return JSON.stringify({text:'',tables:[],citations:[],blocked});
               const tables = Array.from(main.querySelectorAll('table')).slice(0,5).map(t => Array.from(t.rows).slice(0,25).map(r => Array.from(r.cells).slice(0,8).map(c => c.innerText.slice(0,160))));
-              const citations = Array.from(main.querySelectorAll('a[href]')).map(a => ({title:(a.innerText||'參考來源').slice(0,100),url:a.href})).filter(a => a.url.startsWith('https://') && !a.url.startsWith('https://search.brave.com/')).slice(0,8);
+              const citations = Array.from(main.querySelectorAll('a[href]')).map(a => ({title:([a.getAttribute('aria-label'),a.innerText,a.title].map(s=>(s||'').replace(/\s+/g,' ').trim()).find(Boolean)||a.hostname||'參考來源').slice(0,100),url:a.href})).filter(a => a.url.startsWith('https://') && !a.url.startsWith('https://search.brave.com/')).slice(0,8);
               for (const url of (main.innerText.match(/https:\/\/[^\s<>"'）)，,；;]+/g)||[]).slice(0,3)) {
                 if (!citations.some(c=>c.url===url)) citations.push({title:'AI 列出之來源',url});
               }
@@ -319,7 +319,7 @@ class GoogleAiPageLoader(context: Context) : GoogleAiPageSource {
               if (!main) return empty();
               const modelLabel = (main.querySelector('[id^="heading-"]')?.innerText || 'GPT-4o mini').trim();
               const tables = Array.from(main.querySelectorAll('table')).slice(0,5).map(t => Array.from(t.rows).slice(0,25).map(r => Array.from(r.cells).slice(0,8).map(c => c.innerText.slice(0,160))));
-              const citations = Array.from(main.querySelectorAll('a[href]')).map(a => ({title:(a.innerText||'參考來源').slice(0,100),url:a.href})).filter(a => a.url.startsWith('https://') && !a.url.startsWith('https://duck.ai/')).slice(0,8);
+              const citations = Array.from(main.querySelectorAll('a[href]')).map(a => ({title:([a.getAttribute('aria-label'),a.innerText,a.title].map(s=>(s||'').replace(/\s+/g,' ').trim()).find(Boolean)||a.hostname||'參考來源').slice(0,100),url:a.href})).filter(a => a.url.startsWith('https://') && !a.url.startsWith('https://duck.ai/')).slice(0,8);
               for (const url of (main.innerText.match(/https:\/\/[^\s<>"'）)，,；;]+/g)||[]).slice(0,3)) {
                 if (!citations.some(c=>c.url===url)) citations.push({title:'AI 列出之來源',url});
               }
@@ -379,7 +379,7 @@ class GoogleAiPageLoader(context: Context) : GoogleAiPageSource {
               if (!main || !main.innerText.trim()) return empty();
               const modelLabel = (document.querySelector('[data-test-id="bard-mode-menu-button"], .input-area-switch-label, .mode-title')?.innerText || 'Flash').replace(/\s+/g,' ').trim().slice(0,30);
               const tables = Array.from(main.querySelectorAll('table')).slice(0,5).map(t => Array.from(t.rows).slice(0,25).map(r => Array.from(r.cells).slice(0,8).map(c => c.innerText.slice(0,160))));
-              const citations = Array.from(main.querySelectorAll('a[href]')).map(a => ({title:(a.innerText||a.getAttribute('aria-label')||'參考來源').slice(0,100),url:a.href})).filter(a => a.url.startsWith('https://') && !a.url.includes('gemini.google.com') && !a.url.includes('accounts.google.com') && !a.url.includes('support.google.com')).slice(0,8);
+              const citations = Array.from(main.querySelectorAll('a[href]')).map(a => ({title:([a.getAttribute('aria-label'),a.innerText,a.title].map(s=>(s||'').replace(/\s+/g,' ').trim()).find(Boolean)||a.hostname||'參考來源').slice(0,100),url:a.href})).filter(a => a.url.startsWith('https://') && !a.url.includes('gemini.google.com') && !a.url.includes('accounts.google.com') && !a.url.includes('support.google.com')).slice(0,8);
               for (const url of (main.innerText.match(/https:\/\/[^\s<>"'）)，,；;]+/g)||[]).slice(0,3)) {
                 if (!citations.some(c=>c.url===url)) citations.push({title:'AI 列出之來源',url});
               }
@@ -441,7 +441,7 @@ class GoogleAiPageLoader(context: Context) : GoogleAiPageSource {
               if (!main || !main.innerText.trim()) return empty();
               const modelLabel = (document.querySelector('[data-testid="model-switcher-dropdown-button"], button[aria-label*="Model"], button[aria-label*="模型"]')?.innerText || 'GPT-6 Luna').replace(/\s+/g,' ').trim().slice(0,30);
               const tables = Array.from(main.querySelectorAll('table')).slice(0,5).map(t => Array.from(t.rows).slice(0,25).map(r => Array.from(r.cells).slice(0,8).map(c => c.innerText.slice(0,160))));
-              const citations = Array.from(main.querySelectorAll('a[href]')).map(a => ({title:(a.innerText||a.getAttribute('aria-label')||'參考來源').slice(0,100),url:a.href})).filter(a => a.url.startsWith('https://') && !a.url.includes('chatgpt.com') && !a.url.includes('openai.com')).slice(0,8);
+              const citations = Array.from(main.querySelectorAll('a[href]')).map(a => ({title:([a.getAttribute('aria-label'),a.innerText,a.title].map(s=>(s||'').replace(/\s+/g,' ').trim()).find(Boolean)||a.hostname||'參考來源').slice(0,100),url:a.href})).filter(a => a.url.startsWith('https://') && !a.url.includes('chatgpt.com') && !a.url.includes('openai.com')).slice(0,8);
               for (const url of (main.innerText.match(/https:\/\/[^\s<>"'）)，,；;]+/g)||[]).slice(0,3)) {
                 if (!citations.some(c=>c.url===url)) citations.push({title:'AI 列出之來源',url});
               }

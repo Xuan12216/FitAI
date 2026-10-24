@@ -13,8 +13,8 @@ object NutritionPortionCalculator {
         val food = chosen ?: reference.foods.first()
         val normalizedPortion = Normalizer.normalize(portion.trim(), Normalizer.Form.NFKC).lowercase(Locale.ROOT)
         if (!food.isPer100g) {
-            val serving = Regex("^(\\d+(?:\\.\\d+)?)\\s*(份|个|個|片|碗|包|杯)$").matchEntire(normalizedPortion) ?: return analysis
-            if (serving.groupValues[2].replace("个", "個") != food.servingLabel.drop(1)) return analysis
+            val serving = Regex("^(\\d+(?:\\.\\d+)?)\\s*(份|个|個|颗|顆|粒|片|碗|包|杯|块|塊|条|條|支|串|盘|盤|盒|罐|瓶)$").matchEntire(normalizedPortion) ?: return analysis
+            if (normalizeServingUnit(serving.groupValues[2]) != food.servingLabel.drop(1)) return analysis
             val count = serving.groupValues[1].toFloatOrNull()?.takeIf { it.isFinite() && it in 0f..100f } ?: return analysis
             return analysis.copy(
                 calories = food.calories * count,

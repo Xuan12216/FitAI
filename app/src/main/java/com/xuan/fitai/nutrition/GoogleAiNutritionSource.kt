@@ -155,8 +155,8 @@ object GoogleAiNutritionParser {
     fun basisForPortion(portion: String): String? {
         val p = normalized(portion).lowercase()
         if (Regex("^\\d+(?:\\.\\d+)?(g|克|公克|kg|公斤|千克)$").matches(p)) return "100g"
-        val unit = Regex("^\\d+(?:\\.\\d+)?(份|個|个|片|碗|包|杯)$").matchEntire(p)?.groupValues?.get(1) ?: return null
-        return "1" + unit.replace("个", "個")
+        val unit = Regex("^\\d+(?:\\.\\d+)?(份|個|个|顆|颗|粒|片|碗|包|杯|塊|块|條|条|支|串|盤|盘|盒|罐|瓶)$").matchEntire(p)?.groupValues?.get(1) ?: return null
+        return "1" + normalizeServingUnit(unit)
     }
 
     private fun value(raw: String): Float? {
@@ -174,7 +174,8 @@ object GoogleAiNutritionParser {
             return Regex("$boundary(?:每)?(\\d+(?:\\.\\d+)?)(?:g|公克|克)(?![a-z])")
                 .findAll(clean).any { it.groupValues[1].toFloatOrNull() == 100f }
         }
-        val unit = Regex.escape(basis.drop(1))
+        val rawUnit = basis.drop(1)
+        val unit = if (rawUnit in setOf("顆", "粒")) "[顆颗個个粒]" else Regex.escape(rawUnit)
         return Regex("$boundary(?:每(?:(\\d+(?:\\.\\d+)?|一))?|(\\d+(?:\\.\\d+)?|一))$unit")
             .findAll(clean).toList().let { matches ->
                 matches.isNotEmpty() && matches.all {
@@ -231,7 +232,7 @@ object GoogleAiNutritionParser {
     }
 
     private fun hasExplicitBasis(text: String): Boolean =
-        Regex("(?:每(?:\\d+(?:\\.\\d+)?|[一二三四五六七八九十百兩两]+)?|\\d+(?:\\.\\d+)?|[一二三四五六七八九十百兩两]+)(?:g|公克|克|份|個|片|碗|包|杯)")
+        Regex("(?:每(?:\\d+(?:\\.\\d+)?|[一二三四五六七八九十百兩两]+)?|\\d+(?:\\.\\d+)?|[一二三四五六七八九十百兩两]+)(?:g|公克|克|份|個|个|顆|颗|粒|片|碗|包|杯|塊|块|條|条|支|串|盤|盘|盒|罐|瓶)")
             .containsMatchIn(normalized(text).lowercase())
 
     private fun extractProseNutrients(chunk: String): List<Float>? {
@@ -266,7 +267,7 @@ object GoogleAiNutritionParser {
         // Nutrient grams are not declarations of the food's serving basis.
         val nutrientStart = Regex("(?:熱量|卡路里|蛋白質|蛋白质|碳水|醣類|總脂肪|脂肪)(?=\\s*[：:]?\\s*(?:約|大約|~|～)?\\s*\\p{N})").find(intro)?.range?.first ?: intro.length
         val basisIntro = intro.take(nutrientStart)
-        val ambiguousBasis = if (basis == "100g") Regex("(?:每\\s*(?:1|一)?|一)\\s*[份個片碗包杯]").containsMatchIn(basisIntro)
+        val ambiguousBasis = if (basis == "100g") Regex("(?:每\\s*(?:1|一)?|一)\\s*[份個个顆颗粒片碗包杯塊块條条支串盤盘盒罐瓶]").containsMatchIn(basisIntro)
             else Regex("(?<![\\d.])100(?:\\.0+)?(?:g|公克|克)(?![a-z])")
                 .containsMatchIn(normalized(basisIntro).lowercase())
         var nutrients: List<Float>? = null
