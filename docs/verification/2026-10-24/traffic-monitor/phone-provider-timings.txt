@@ -1,0 +1,2 @@
+10-24 09:19:26.099 31534 31534 I FitAI_WebAI: reason=nutrition-ready elapsedMs=7168 pageFinishedMs=785 firstAnswerMs=5198 inspections=11 chars=94 sources=1 usable=true blocked=false
+10-24 09:19:41.883 31534 31534 I FitAI_WebAI: reason=nutrition-ready elapsedMs=15766 pageFinishedMs=13922 firstAnswerMs=14449 inspections=24 chars=108 sources=3 usable=true blocked=false

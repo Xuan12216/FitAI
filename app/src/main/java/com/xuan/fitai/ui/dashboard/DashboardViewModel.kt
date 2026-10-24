@@ -102,6 +102,8 @@ class DashboardViewModel(
     private val dashboardActive = MutableStateFlow(false)
     private var lastGeneratedAdviceSignature: String? = null
     private val refreshVersion = MutableStateFlow(0)
+    @Volatile
+    private var bypassAdviceCacheOnce = false
 
     val modelLoadState = gemmaHelper.loadState
     val loadedModelName: StateFlow<String?> = gemmaHelper.loadedModelName
@@ -192,6 +194,7 @@ class DashboardViewModel(
     fun refreshDailyAdvice() {
         dashboardActive.value = true
         lastGeneratedAdviceSignature = null
+        bypassAdviceCacheOnce = true
         refreshVersion.update { it + 1 }
     }
 
@@ -231,8 +234,10 @@ class DashboardViewModel(
         )
 
         try {
-            val cacheKey = "${LocalDate.now()}|$contentSignature"
-            val cached = if (refreshVersion.value == 0) progressDao.advice(cacheKey) else null
+            val bypassCache = bypassAdviceCacheOnce
+            bypassAdviceCacheOnce = false
+            val cacheKey = "${today.value}|$contentSignature"
+            val cached = if (!bypassCache) progressDao.advice(cacheKey) else null
             if (cached != null) {
                 _aiAdvice.value = cached.rawText
                 _adviceUpdatedAt.value = cached.updatedAt
@@ -310,8 +315,8 @@ class DashboardViewModel(
         }
     }
 
-    fun askAiForMealSuggestion(foodName: String, portion: String, useReference: Boolean) =
-        foodAssessment.analyze(foodName, portion, userProfile.value.goal, useReference)
+    fun askAiForMealSuggestion(foodName: String, portion: String, useReference: Boolean, googleRetry: Boolean = false) =
+        foodAssessment.analyze(foodName, portion, userProfile.value.goal, useReference, googleRetry)
 
     fun addManualMeal(name: String, cal: Float, p: Float, c: Float, f: Float) {
         viewModelScope.launch {

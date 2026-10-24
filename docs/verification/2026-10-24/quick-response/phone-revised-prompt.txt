@@ -1,0 +1,56 @@
+
+com.xuan.fitai.MultiAiLookupTest:GOOGLE: usable=false attempts=1 outcome=INCOMPLETE model=null fast=null sources=1 message=網路 AI 已回覆，但餐點名稱、份量或營養數值不完整；已達 1 次上限，改用台灣資料。
+BRAVE: usable=false attempts=1 outcome=INCOMPLETE model=null fast=null sources=1 message=網路 AI 已回覆，但餐點名稱、份量或營養數值不完整；已達 1 次上限，改用台灣資料。
+DUCK: usable=false attempts=1 outcome=TIMEOUT model=null fast=null sources=0 message=Duck.ai 頁面已載入，但 AI 回答等待逾時。改用台灣資料。
+
+Error in optInLiveProvidersRetainActualIdentityAndCitations(com.xuan.fitai.MultiAiLookupTest):
+java.lang.AssertionError: GOOGLE: usable=false attempts=1 outcome=INCOMPLETE model=null fast=null sources=1 message=網路 AI 已回覆，但餐點名稱、份量或營養數值不完整；已達 1 次上限，改用台灣資料。 text=火腿蛋餅、每份141g、294kcal、蛋白質15g、碳水37g、脂肪10g。來源：天主教聖馬爾定醫院 
+如需查詢其他餐點的營養數值，請告訴我。
+AI 可能會出錯，請查證回覆內容
+聖馬爾定醫院
+常用中式食物熱量及營養成份表
+常用中式食物熱量及營養成份表. 食物名稱. 每份重量. (公克). 每份熱量. (大卡). 每份提 … 熱量比(%). 原味蛋餅. 玉米蛋餅.
+BRAVE: usable=false attempts=1 outcome=INCOMPLETE model=null fast=null sources=1 message=網路 AI 已回覆，但餐點名稱、份量或營養數值不完整；已達 1 次上限，改用台灣資料。 text=火腿蛋餅｜每1份（141g）｜294kcal｜蛋白質15g｜碳水37g｜脂肪10g｜https://www.stm.org.tw/diabetes/UploadedFiles/2020/9c602c68-5a75-4d03-8a4e-e4942e383442.pdf
+DUCK: usable=false attempts=1 outcome=TIMEOUT model=null fast=null sources=0 message=Duck.ai 頁面已載入，但 AI 回答等待逾時。改用台灣資料。 text=
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.xuan.fitai.MultiAiLookupTest$optInLiveProvidersRetainActualIdentityAndCitations$1.invokeSuspend(MultiAiLookupTest.kt:80)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:101)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:95)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:69)
+	at kotlinx.coroutines.BuildersKt.runBlocking(dex-id-649335b96e5e17940169db2070728945c5822c0c:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:47)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(dex-id-649335b96e5e17940169db2070728945c5822c0c:1)
+	at com.xuan.fitai.MultiAiLookupTest.optInLiveProvidersRetainActualIdentityAndCitations(MultiAiLookupTest.kt:47)
+
+
+Time: 48.394
+There was 1 failure:
+1) optInLiveProvidersRetainActualIdentityAndCitations(com.xuan.fitai.MultiAiLookupTest)
+java.lang.AssertionError: GOOGLE: usable=false attempts=1 outcome=INCOMPLETE model=null fast=null sources=1 message=網路 AI 已回覆，但餐點名稱、份量或營養數值不完整；已達 1 次上限，改用台灣資料。 text=火腿蛋餅、每份141g、294kcal、蛋白質15g、碳水37g、脂肪10g。來源：天主教聖馬爾定醫院 
+如需查詢其他餐點的營養數值，請告訴我。
+AI 可能會出錯，請查證回覆內容
+聖馬爾定醫院
+常用中式食物熱量及營養成份表
+常用中式食物熱量及營養成份表. 食物名稱. 每份重量. (公克). 每份熱量. (大卡). 每份提 … 熱量比(%). 原味蛋餅. 玉米蛋餅.
+BRAVE: usable=false attempts=1 outcome=INCOMPLETE model=null fast=null sources=1 message=網路 AI 已回覆，但餐點名稱、份量或營養數值不完整；已達 1 次上限，改用台灣資料。 text=火腿蛋餅｜每1份（141g）｜294kcal｜蛋白質15g｜碳水37g｜脂肪10g｜https://www.stm.org.tw/diabetes/UploadedFiles/2020/9c602c68-5a75-4d03-8a4e-e4942e383442.pdf
+DUCK: usable=false attempts=1 outcome=TIMEOUT model=null fast=null sources=0 message=Duck.ai 頁面已載入，但 AI 回答等待逾時。改用台灣資料。 text=
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.xuan.fitai.MultiAiLookupTest$optInLiveProvidersRetainActualIdentityAndCitations$1.invokeSuspend(MultiAiLookupTest.kt:80)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:101)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:95)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:69)
+	at kotlinx.coroutines.BuildersKt.runBlocking(dex-id-649335b96e5e17940169db2070728945c5822c0c:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:47)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(dex-id-649335b96e5e17940169db2070728945c5822c0c:1)
+	at com.xuan.fitai.MultiAiLookupTest.optInLiveProvidersRetainActualIdentityAndCitations(MultiAiLookupTest.kt:47)
+
+FAILURES!!!
+Tests run: 1,  Failures: 1
+
+

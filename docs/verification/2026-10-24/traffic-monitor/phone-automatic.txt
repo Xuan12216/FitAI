@@ -1,0 +1,10 @@
+
+com.xuan.fitai.MultiAiLookupTest:automatic GOOGLE: blocked=false failure=null sources=1
+automatic result=Google AI attempts=1
+.
+
+Time: 4.583
+
+OK (1 test)
+
+

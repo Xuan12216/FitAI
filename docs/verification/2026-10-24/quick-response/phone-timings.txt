@@ -1,0 +1,7 @@
+--------- beginning of main
+10-24 09:47:11.647 15834 15834 I FitAI_WebAI: reason=answer-stable elapsedMs=4668 pageFinishedMs=1631 firstAnswerMs=3359 inspections=7 chars=323 sources=1 fast=null usable=false blocked=false
+10-24 09:47:18.755 15834 15834 I FitAI_WebAI: reason=nutrition-ready elapsedMs=7100 pageFinishedMs=1048 firstAnswerMs=5776 inspections=11 chars=139 sources=1 fast=null usable=true blocked=false
+10-24 09:47:30.841 15834 15834 I FitAI_WebAI: reason=answer-stable elapsedMs=12071 pageFinishedMs=10327 firstAnswerMs=10766 inspections=28 chars=148 sources=3 fast=true usable=false blocked=false
+10-24 09:49:10.372 18374 18374 I FitAI_WebAI: reason=answer-stable elapsedMs=14356 pageFinishedMs=1486 firstAnswerMs=13050 inspections=22 chars=183 sources=1 fast=null usable=false blocked=false
+10-24 09:49:19.378 18374 18374 I FitAI_WebAI: reason=answer-stable elapsedMs=9001 pageFinishedMs=466 firstAnswerMs=5078 inspections=14 chars=133 sources=1 fast=null usable=false blocked=false
+10-24 09:49:44.393 18374 18374 I FitAI_WebAI: reason=deadline-without-answer elapsedMs=25007 pageFinishedMs=706 firstAnswerMs=-1 inspections=161 chars=0 sources=0 fast=null usable=false blocked=false

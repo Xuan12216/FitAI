@@ -1,0 +1,81 @@
+
+com.xuan.fitai.AdaptiveBottomSheetTest:....
+com.xuan.fitai.AdaptiveLayoutTest:.....
+com.xuan.fitai.AutoBackupSchedulingTest:..
+com.xuan.fitai.MealGroupTest:.
+com.xuan.fitai.NutritionReferenceTest:....
+Error in liveOfficialDownloadAndCacheWorkWithinBudget(com.xuan.fitai.NutritionReferenceTest):
+java.lang.AssertionError: 沒有可靠的相符營養資料，使用本地 AI 估算。
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at org.junit.Assert.assertNotNull(Assert.java:713)
+	at com.xuan.fitai.NutritionReferenceTest$liveOfficialDownloadAndCacheWorkWithinBudget$1.invokeSuspend(NutritionReferenceTest.kt:67)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.internal.ScopeCoroutine.afterResume(Scopes.kt:28)
+	at kotlinx.coroutines.AbstractCoroutine.resumeWith(AbstractCoroutine.kt:100)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:47)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:101)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:95)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:69)
+	at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:47)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)
+	at com.xuan.fitai.NutritionReferenceTest.liveOfficialDownloadAndCacheWorkWithinBudget(NutritionReferenceTest.kt:61)
+.
+Error in realPublishedDatasetParsesWithinLookupBudget(com.xuan.fitai.NutritionReferenceTest):
+java.lang.AssertionError: parse took 117695 ms
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.xuan.fitai.NutritionReferenceTest$realPublishedDatasetParsesWithinLookupBudget$1.invokeSuspend(NutritionReferenceTest.kt:104)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:101)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:95)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:69)
+	at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:47)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)
+	at com.xuan.fitai.NutritionReferenceTest.realPublishedDatasetParsesWithinLookupBudget(NutritionReferenceTest.kt:94)
+
+com.xuan.fitai.RecordIntegrityTest:......
+
+Time: 182.339
+There were 2 failures:
+1) liveOfficialDownloadAndCacheWorkWithinBudget(com.xuan.fitai.NutritionReferenceTest)
+java.lang.AssertionError: 沒有可靠的相符營養資料，使用本地 AI 估算。
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at org.junit.Assert.assertNotNull(Assert.java:713)
+	at com.xuan.fitai.NutritionReferenceTest$liveOfficialDownloadAndCacheWorkWithinBudget$1.invokeSuspend(NutritionReferenceTest.kt:67)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.internal.ScopeCoroutine.afterResume(Scopes.kt:28)
+	at kotlinx.coroutines.AbstractCoroutine.resumeWith(AbstractCoroutine.kt:100)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:47)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:101)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:95)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:69)
+	at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:47)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)
+	at com.xuan.fitai.NutritionReferenceTest.liveOfficialDownloadAndCacheWorkWithinBudget(NutritionReferenceTest.kt:61)
+2) realPublishedDatasetParsesWithinLookupBudget(com.xuan.fitai.NutritionReferenceTest)
+java.lang.AssertionError: parse took 117695 ms
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.xuan.fitai.NutritionReferenceTest$realPublishedDatasetParsesWithinLookupBudget$1.invokeSuspend(NutritionReferenceTest.kt:104)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:101)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:95)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:69)
+	at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:47)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)
+	at com.xuan.fitai.NutritionReferenceTest.realPublishedDatasetParsesWithinLookupBudget(NutritionReferenceTest.kt:94)
+
+FAILURES!!!
+Tests run: 25,  Failures: 2
+
+

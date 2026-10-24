@@ -1,0 +1,40 @@
+
+com.xuan.fitai.MultiAiLookupTest:GOOGLE: usable=false attempts=1 outcome=TIMEOUT model=null sources=0 message=Google AI 頁面已載入，但 AI 回答等待逾時。改用台灣資料。
+
+Error in optInLiveProvidersRetainActualIdentityAndCitations(com.xuan.fitai.MultiAiLookupTest):
+java.lang.AssertionError: GOOGLE: usable=false attempts=1 outcome=TIMEOUT model=null sources=0 message=Google AI 頁面已載入，但 AI 回答等待逾時。改用台灣資料。 text=
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.xuan.fitai.MultiAiLookupTest$optInLiveProvidersRetainActualIdentityAndCitations$1.invokeSuspend(MultiAiLookupTest.kt:48)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:101)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:95)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:69)
+	at kotlinx.coroutines.BuildersKt.runBlocking(dex-id-649335b96e5e17940169db2070728945c5822c0c:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:47)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(dex-id-649335b96e5e17940169db2070728945c5822c0c:1)
+	at com.xuan.fitai.MultiAiLookupTest.optInLiveProvidersRetainActualIdentityAndCitations(MultiAiLookupTest.kt:16)
+
+
+Time: 25.128
+There was 1 failure:
+1) optInLiveProvidersRetainActualIdentityAndCitations(com.xuan.fitai.MultiAiLookupTest)
+java.lang.AssertionError: GOOGLE: usable=false attempts=1 outcome=TIMEOUT model=null sources=0 message=Google AI 頁面已載入，但 AI 回答等待逾時。改用台灣資料。 text=
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.xuan.fitai.MultiAiLookupTest$optInLiveProvidersRetainActualIdentityAndCitations$1.invokeSuspend(MultiAiLookupTest.kt:48)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:101)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:95)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:69)
+	at kotlinx.coroutines.BuildersKt.runBlocking(dex-id-649335b96e5e17940169db2070728945c5822c0c:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:47)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(dex-id-649335b96e5e17940169db2070728945c5822c0c:1)
+	at com.xuan.fitai.MultiAiLookupTest.optInLiveProvidersRetainActualIdentityAndCitations(MultiAiLookupTest.kt:16)
+
+FAILURES!!!
+Tests run: 1,  Failures: 1
+
+

@@ -1,0 +1,5 @@
+--------- beginning of main
+10-23 20:00:32.687  5100  5100 I FitAI_WebAI: reason=answer-stable elapsedMs=8745 pageFinishedMs=1816 firstAnswerMs=6778 inspections=13 chars=342 sources=1 usable=false blocked=false
+10-23 20:00:39.282  5100  5100 I FitAI_WebAI: reason=answer-stable elapsedMs=6575 pageFinishedMs=1195 firstAnswerMs=5269 inspections=10 chars=311 sources=1 usable=false blocked=false
+10-23 20:06:04.106 14711 14711 I FitAI_WebAI: reason=nutrition-ready elapsedMs=4638 pageFinishedMs=1369 firstAnswerMs=3327 inspections=7 chars=229 sources=1 usable=true blocked=false
+10-23 20:06:04.111 14711 14728 I FitAI_GoogleTest: Google AI success: searches=1, calories=294.0, protein=15.0, carbs=37.0, fat=10.0; cached without another search

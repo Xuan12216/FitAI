@@ -1,0 +1,29 @@
+package com.xuan.fitai.nutrition
+
+import org.junit.Assert.*
+import org.junit.Test
+
+class ReviewRegressionProbeTest {
+    private val citation = GoogleAiCitation("來源", "https://example.org/nutrition")
+    private fun parse(text: String) = GoogleAiNutritionParser.parse("火腿蛋餅", "1份",
+        GoogleAiPage(text, citations = listOf(citation)), GoogleAiNutritionSource.searchUrl("火腿蛋餅", "1份", 1))
+
+    @Test fun totalFatMustNotUseSaturatedFat() {
+        val food = parse("火腿蛋餅每1份，熱量300kcal、蛋白質15g、碳水37g、飽和脂肪3g、總脂肪10g")!!
+        assertEquals(10f, food.fat)
+    }
+    @Test fun multiServingAnswerMustNotBecomeOneServing() {
+        val food = parse("火腿蛋餅每11份，熱量3300kcal、蛋白質132g、碳水330g、脂肪110g")
+        assertNull("11份 was accepted as ${food?.servingLabel}: ${food?.calories}", food)
+    }
+    @Test fun anotherDishMustNotSupplyTheRequestedDishNumbers() {
+        val food = parse("火腿蛋餅與原味蛋餅每1份營養比較。原味蛋餅：熱量261kcal、蛋白質11g、碳水34g、脂肪9g。火腿蛋餅：熱量294kcal、蛋白質15g、碳水37g、脂肪10g")
+        assertTrue("wrong dish calories=${food?.calories}", food == null || food.calories == 294f)
+    }
+    @Test fun supportedMealNameMustGenerateAnAllowedProviderUrl() {
+        val name = "香煎雞胸肉便當（半碗白飯、花椰菜、滷蛋、炒高麗菜）加一杯大杯無糖豆漿"
+        assertTrue(name.length in 2..80)
+        val url = GoogleAiNutritionSource.providerUrl(WebAiProvider.GOOGLE, name, "1份", 1)
+        assertEquals("generated url length=${url.length}", WebAiProvider.GOOGLE, WebAiProvider.fromUrl(url))
+    }
+}

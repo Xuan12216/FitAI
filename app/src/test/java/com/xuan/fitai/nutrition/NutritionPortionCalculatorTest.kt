@@ -24,4 +24,23 @@ class NutritionPortionCalculatorTest {
         assertEquals(analysis, NutritionPortionCalculator.apply(analysis, NutritionReference(1, true, listOf(rice)), "1碗"))
         assertEquals(analysis, NutritionPortionCalculator.apply(analysis, null, "200g"))
     }
+
+    @Test fun calorieOnlyServingScalesCaloriesButPreservesEstimatedMacrosAndRejectsGrams() {
+        val food = NutritionFood("WEB-NTU-火腿蛋餅", "火腿蛋餅", "", "每份", 281f, 0f, 0f, 0f,
+            sourceUrl = NTU_BREAKFAST_URL, servingLabel = "1份", hasMacros = false)
+        val ref = NutritionReference(1, false, listOf(food))
+        val result = NutritionPortionCalculator.apply(analysis, ref, "2份")
+        assertEquals(562f, result.calories); assertEquals(analysis.protein, result.protein)
+        assertTrue(result.reasoning.contains("仍為 AI 估算"))
+        assertEquals(analysis, NutritionPortionCalculator.apply(analysis, ref, "200g"))
+        assertEquals(analysis, NutritionPortionCalculator.apply(analysis, ref, "1個"))
+    }
+
+    @Test fun publishedServingMacrosScaleOnlyWithSameUnit() {
+        val food = rice.copy(servingLabel = "1個")
+        val ref = NutritionReference(1, false, listOf(food))
+        val result = NutritionPortionCalculator.apply(analysis, ref, "2个")
+        assertEquals(366f, result.calories); assertEquals(6.2f, result.protein)
+        assertEquals(analysis, NutritionPortionCalculator.apply(analysis, ref, "2份"))
+    }
 }

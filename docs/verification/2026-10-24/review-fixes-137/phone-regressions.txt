@@ -1,0 +1,10 @@
+
+com.xuan.fitai.nutrition.NutritionParserRegressionTest:...........
+com.xuan.fitai.MultiAiUiTest:...
+com.xuan.fitai.MultiAiLookupTest:.
+
+Time: 4.66
+
+OK (15 tests)
+
+

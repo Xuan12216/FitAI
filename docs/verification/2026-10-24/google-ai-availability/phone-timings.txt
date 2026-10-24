@@ -1,0 +1,10 @@
+10-24 08:58:12.650 26125 26125 I FitAI_WebAI: reason=nutrition-ready elapsedMs=3991 pageFinishedMs=1582 firstAnswerMs=2681 inspections=6 chars=227 sources=1 usable=true blocked=false
+10-24 08:58:12.653 26125 26161 I FitAI_GoogleSample: query=1 elapsedMs=3997 outcome=usable-answer sources=1 chars=227 failure=
+10-24 08:58:22.801 26125 26125 I FitAI_WebAI: reason=nutrition-ready elapsedMs=5146 pageFinishedMs=902 firstAnswerMs=3837 inspections=8 chars=121 sources=1 usable=true blocked=false
+10-24 08:58:22.804 26125 26161 I FitAI_GoogleSample: query=2 elapsedMs=5150 outcome=usable-answer sources=1 chars=121 failure=
+10-24 08:58:31.629 26125 26125 I FitAI_WebAI: reason=nutrition-ready elapsedMs=3820 pageFinishedMs=732 firstAnswerMs=1859 inspections=6 chars=290 sources=1 usable=true blocked=false
+10-24 08:58:31.631 26125 26161 I FitAI_GoogleSample: query=3 elapsedMs=3824 outcome=usable-answer sources=1 chars=290 failure=
+10-24 08:58:41.723 26125 26125 I FitAI_WebAI: reason=nutrition-ready elapsedMs=5089 pageFinishedMs=541 firstAnswerMs=3782 inspections=8 chars=216 sources=1 usable=true blocked=false
+10-24 08:58:41.726 26125 26161 I FitAI_GoogleSample: query=4 elapsedMs=5093 outcome=usable-answer sources=1 chars=216 failure=
+10-24 08:59:06.168 26125 26125 I FitAI_WebAI: reason=nutrition-ready elapsedMs=19440 pageFinishedMs=485 firstAnswerMs=18128 inspections=30 chars=356 sources=2 usable=true blocked=false
+10-24 08:59:06.175 26125 26161 I FitAI_GoogleSample: query=5 elapsedMs=19448 outcome=usable-answer sources=2 chars=356 failure=

@@ -13,8 +13,8 @@ android {
         applicationId = "com.xuan.fitai"
         minSdk = 31
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.3"
+        versionCode = 12
+        versionName = "1.3.8"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -64,6 +64,7 @@ dependencies {
   // Arch Components
   implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.lifecycle.viewmodel.compose)
+  implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
 
   // Compose
   implementation(libs.androidx.compose.ui)

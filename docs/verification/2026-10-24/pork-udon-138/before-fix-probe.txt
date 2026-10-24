@@ -1,0 +1,47 @@
+
+com.xuan.fitai.MultiAiLookupTest:DUCK: usable=false attempts=1 outcome=TIMEOUT model=null fast=false stage=setSpeed sources=0 message=Duck.ai 頁面已載入，但 AI 回答等待逾時。改用台灣資料。
+GOOGLE: usable=false attempts=1 outcome=INCOMPLETE model=null fast=null stage=null sources=1 message=網路 AI 已回覆，但餐點名稱、份量或營養數值不完整；已達 1 次上限，改用台灣資料。
+
+Error in optInLiveProvidersRetainActualIdentityAndCitations(com.xuan.fitai.MultiAiLookupTest):
+java.lang.AssertionError: DUCK: usable=false attempts=1 outcome=TIMEOUT model=null fast=false stage=setSpeed sources=0 message=Duck.ai 頁面已載入，但 AI 回答等待逾時。改用台灣資料。 text=
+GOOGLE: usable=false attempts=1 outcome=INCOMPLETE model=null fast=null stage=null sources=1 message=網路 AI 已回覆，但餐點名稱、份量或營養數值不完整；已達 1 次上限，改用台灣資料。 text=豬排烏龍麵、每1份、—kcal、—g、—g、—g https://health.udn.com/health/food/4730
+如果您能提供特定品牌或餐廳名稱（例如丸龜製麵等），我可以協助查詢是否有對應的精確營養標示。
+AI 可能會出錯，請查證回覆內容
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.xuan.fitai.MultiAiLookupTest$optInLiveProvidersRetainActualIdentityAndCitations$1.invokeSuspend(MultiAiLookupTest.kt:81)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:101)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:95)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:69)
+	at kotlinx.coroutines.BuildersKt.runBlocking(dex-id-649335b96e5e17940169db2070728945c5822c0c:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:47)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(dex-id-649335b96e5e17940169db2070728945c5822c0c:1)
+	at com.xuan.fitai.MultiAiLookupTest.optInLiveProvidersRetainActualIdentityAndCitations(MultiAiLookupTest.kt:47)
+
+
+Time: 28.955
+There was 1 failure:
+1) optInLiveProvidersRetainActualIdentityAndCitations(com.xuan.fitai.MultiAiLookupTest)
+java.lang.AssertionError: DUCK: usable=false attempts=1 outcome=TIMEOUT model=null fast=false stage=setSpeed sources=0 message=Duck.ai 頁面已載入，但 AI 回答等待逾時。改用台灣資料。 text=
+GOOGLE: usable=false attempts=1 outcome=INCOMPLETE model=null fast=null stage=null sources=1 message=網路 AI 已回覆，但餐點名稱、份量或營養數值不完整；已達 1 次上限，改用台灣資料。 text=豬排烏龍麵、每1份、—kcal、—g、—g、—g https://health.udn.com/health/food/4730
+如果您能提供特定品牌或餐廳名稱（例如丸龜製麵等），我可以協助查詢是否有對應的精確營養標示。
+AI 可能會出錯，請查證回覆內容
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.xuan.fitai.MultiAiLookupTest$optInLiveProvidersRetainActualIdentityAndCitations$1.invokeSuspend(MultiAiLookupTest.kt:81)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:101)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:95)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:69)
+	at kotlinx.coroutines.BuildersKt.runBlocking(dex-id-649335b96e5e17940169db2070728945c5822c0c:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:47)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(dex-id-649335b96e5e17940169db2070728945c5822c0c:1)
+	at com.xuan.fitai.MultiAiLookupTest.optInLiveProvidersRetainActualIdentityAndCitations(MultiAiLookupTest.kt:47)
+
+FAILURES!!!
+Tests run: 1,  Failures: 1
+
+

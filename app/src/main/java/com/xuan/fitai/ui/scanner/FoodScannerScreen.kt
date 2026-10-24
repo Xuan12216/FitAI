@@ -34,7 +34,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.xuan.fitai.camera.CameraController
@@ -428,7 +430,7 @@ fun FoodScannerScreen(
                                 modifier = Modifier.fillMaxWidth().height(48.dp),
                                 enabled = canAnalyze
                             ) {
-                                Text("送出給本地 Gemma 分析")
+                                Text(if (useReference) "開始 AI 營養評估" else "送出給本地 Gemma 分析")
                             }
 
                             OutlinedButton(
@@ -448,7 +450,7 @@ fun FoodScannerScreen(
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             Text(
-                                text = "Gemma AI 分析中",
+                                text = "AI 營養分析中",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.align(Alignment.CenterHorizontally)
@@ -475,6 +477,14 @@ fun FoodScannerScreen(
                         var protein by rememberSaveable(state.foodName, state.portion) { mutableStateOf(analysis.protein.toString()) }
                         var carbs by rememberSaveable(state.foodName, state.portion) { mutableStateOf(analysis.carbs.toString()) }
                         var fat by rememberSaveable(state.foodName, state.portion) { mutableStateOf(analysis.fat.toString()) }
+                        var lastAnalysis by remember { mutableStateOf(analysis) }
+                        LaunchedEffect(analysis) {
+                            if (lastAnalysis != analysis) {
+                            calories = analysis.calories.toString(); protein = analysis.protein.toString()
+                            carbs = analysis.carbs.toString(); fat = analysis.fat.toString()
+                            lastAnalysis = analysis
+                            }
+                        }
                         val validNumbers = listOf(calories, protein, carbs, fat).all { it.toFloatOrNull()?.let { n -> n.isFinite() && n >= 0 } == true }
 
                         Column(
@@ -491,15 +501,66 @@ fun FoodScannerScreen(
                                 modifier = Modifier.align(Alignment.CenterHorizontally)
                             )
 
+                            Text("估算 AI：${com.xuan.fitai.nutrition.nutritionEstimatorLabel(state.referenceJson, true)}", style = MaterialTheme.typography.labelMedium)
                             com.xuan.fitai.ui.components.NutritionReferenceBadge(state.referenceJson)
                             if (state.lookupMessage.isNotBlank()) Text(state.lookupMessage, style = MaterialTheme.typography.bodySmall)
+                            com.xuan.fitai.ui.components.GoogleAiTrafficStatus()
+                            if (state.canRetryGoogle) {
+                                OutlinedButton(
+                                    onClick = { viewModel.analyzeWithGemma(state.foodName, state.portion, googleRetry = true) },
+                                    enabled = !state.retryingGoogle && !saving,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { Text(if (state.retryingGoogle) "網路 AI 再查一次…" else "再查一次網路 AI") }
+                            }
                             // Stats Grid Card
                             photo?.let { Image(it.asImageBitmap(), "待儲存的食物照片", Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(16.dp)), contentScale = ContentScale.Crop) }
                             Text("AI 估算可在儲存前校正", style = MaterialTheme.typography.bodySmall)
-                            OutlinedTextField(calories, { calories = it }, label = { Text("校正熱量 kcal") }, modifier = Modifier.fillMaxWidth())
-                            OutlinedTextField(protein, { protein = it }, label = { Text("校正蛋白質 g") }, modifier = Modifier.fillMaxWidth())
-                            OutlinedTextField(carbs, { carbs = it }, label = { Text("校正碳水 g") }, modifier = Modifier.fillMaxWidth())
-                            OutlinedTextField(fat, { fat = it }, label = { Text("校正脂肪 g") }, modifier = Modifier.fillMaxWidth())
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = calories,
+                                    onValueChange = { calories = it },
+                                    label = { Text("校正熱量 kcal") },
+                                    singleLine = true,
+                                    enabled = !state.retryingGoogle,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                OutlinedTextField(
+                                    value = protein,
+                                    onValueChange = { protein = it },
+                                    label = { Text("校正蛋白質 g") },
+                                    singleLine = true,
+                                    enabled = !state.retryingGoogle,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = carbs,
+                                    onValueChange = { carbs = it },
+                                    label = { Text("校正碳水 g") },
+                                    singleLine = true,
+                                    enabled = !state.retryingGoogle,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                OutlinedTextField(
+                                    value = fat,
+                                    onValueChange = { fat = it },
+                                    label = { Text("校正脂肪 g") },
+                                    singleLine = true,
+                                    enabled = !state.retryingGoogle,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                             Card(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
@@ -514,38 +575,45 @@ fun FoodScannerScreen(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
+                                        val displayCalories = (calories.toFloatOrNull() ?: analysis.calories).toInt()
+                                        val displayProtein = (protein.toFloatOrNull() ?: analysis.protein).toInt()
+                                        val displayCarbs = (carbs.toFloatOrNull() ?: analysis.carbs).toInt()
+                                        val displayFat = (fat.toFloatOrNull() ?: analysis.fat).toInt()
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                             Text("熱量", style = MaterialTheme.typography.bodySmall)
-                                            Text("${analysis.calories.toInt()} kcal", fontWeight = FontWeight.Bold)
+                                            Text("$displayCalories kcal", fontWeight = FontWeight.Bold)
                                         }
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                             Text("蛋白質", style = MaterialTheme.typography.bodySmall)
-                                            Text("${analysis.protein.toInt()} g", fontWeight = FontWeight.Bold)
+                                            Text("$displayProtein g", fontWeight = FontWeight.Bold)
                                         }
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                             Text("碳水", style = MaterialTheme.typography.bodySmall)
-                                            Text("${analysis.carbs.toInt()} g", fontWeight = FontWeight.Bold)
+                                            Text("$displayCarbs g", fontWeight = FontWeight.Bold)
                                         }
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                             Text("脂肪", style = MaterialTheme.typography.bodySmall)
-                                            Text("${analysis.fat.toInt()} g", fontWeight = FontWeight.Bold)
+                                            Text("$displayFat g", fontWeight = FontWeight.Bold)
                                         }
                                     }
                                     
                                     Spacer(modifier = Modifier.height(16.dp))
                                     
-                                    val suitabilityText = if (analysis.isSuitable) "適合" else "較不適合"
-                                    val suitabilityColor = if (analysis.isSuitable) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
-                                    Text(
-                                        text = "適合您的目標「${userProfile.goal}」嗎？",
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                    Text(
-                                        text = suitabilityText,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = suitabilityColor
-                                    )
+                                    val fromGoogle = com.xuan.fitai.nutrition.NutritionReferenceJson.decodeOrNull(state.referenceJson)?.foods?.any { com.xuan.fitai.nutrition.WebAiProvider.entries.any { provider -> provider.foodId == it.id } } == true
+                                    if (!fromGoogle) {
+                                        val suitabilityText = if (analysis.isSuitable) "適合" else "較不適合"
+                                        val suitabilityColor = if (analysis.isSuitable) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
+                                        Text(
+                                            text = "適合您的目標「${userProfile.goal}」嗎？",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                        Text(
+                                            text = suitabilityText,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = suitabilityColor
+                                        )
+                                    } else Text("網路 AI 提供營養估算，尚未評估個人目標適合度。", style = MaterialTheme.typography.bodySmall)
                                 }
                             }
 
@@ -555,7 +623,7 @@ fun FoodScannerScreen(
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
-                                    Text("Gemma 健康飲食建議：", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                    Text("飲食參考：", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                                     Spacer(modifier = Modifier.height(4.dp))
                                     ThinkingContent(rawText = analysis.advice)
                                 }
@@ -606,7 +674,7 @@ fun FoodScannerScreen(
                             Spacer(modifier = Modifier.height(24.dp))
 
                             Button(
-                                enabled = validNumbers && !saving,
+                                enabled = validNumbers && !saving && !state.retryingGoogle,
                                 onClick = {
                                     viewModel.saveMeal(state.foodName, state.portion, analysis.copy(calories = calories.toFloat(), protein = protein.toFloat(), carbs = carbs.toFloat(), fat = fat.toFloat()), onSaveComplete)
                                 },
@@ -616,6 +684,7 @@ fun FoodScannerScreen(
                             }
 
                             OutlinedButton(
+                                enabled = !state.retryingGoogle,
                                 onClick = { viewModel.resetScanner() },
                                 modifier = Modifier.fillMaxWidth().height(48.dp)
                             ) {
@@ -646,8 +715,13 @@ fun FoodScannerScreen(
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(text = state.message, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
                             Spacer(modifier = Modifier.height(24.dp))
+                            if (state.canRetryGoogle && state.retryFood != null && state.retryPortion != null) {
+                                OutlinedButton(onClick = { viewModel.analyzeWithGemma(state.retryFood, state.retryPortion, googleRetry = true) }) {
+                                    Text("再查一次網路 AI")
+                                }
+                            }
                             Button(onClick = { viewModel.resetScanner() }) {
-                                Text("重試")
+                                Text("重新拍照")
                             }
                         }
                     }

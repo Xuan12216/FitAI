@@ -1,0 +1,2 @@
+--------- beginning of main
+10-24 10:12:04.254  5033  5033 I FitAI_WebAI: reason=nutrition-ready elapsedMs=4571 pageFinishedMs=1481 firstAnswerMs=3239 inspections=7 chars=519 sources=2 fast=null usable=true blocked=false

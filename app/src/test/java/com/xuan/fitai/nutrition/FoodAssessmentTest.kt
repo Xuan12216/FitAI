@@ -51,6 +51,53 @@ class FoodAssessmentTest {
         assertTrue(runCatching { FoodAssessment(model) { error("must not query") }.analyze("白飯", "1份", "維持", true).toList() }.isFailure)
     }
 
+    @Test fun googleSuccessWorksWithoutLoadedGemmaAndNeverReestimatesLocally() = runTest {
+        val model = Model(512)
+        model.loadState.value = ModelLoadState.Loading
+        val food = NutritionFood("GOOGLE-AI-1", "白飯", "", "Google AI 估算", 183f, 3.1f, 41f, .3f)
+        val google = GoogleAiAssessment(GemmaFoodAnalysis(183f, 3.1f, 41f, .3f, true, "估算", referenceFoodId = food.id),
+            NutritionReference(1000, false, listOf(food), food.id))
+        val events = FoodAssessment(model, GoogleAiLookupSource { _, _ -> GoogleAiLookup(google, "Google AI", 1) }) {
+            error("must not query Taiwan or local model")
+        }.analyze("白飯", "200g", "維持", true).toList()
+        assertEquals("", model.reference)
+        assertEquals(google.reference, events.filterIsInstance<FoodAssessmentEvent.Lookup>().single().result.reference)
+        assertTrue(events.filterIsInstance<FoodAssessmentEvent.Token>().single().text.contains("GOOGLE-AI-1"))
+    }
+
+    @Test fun failedGoogleFallsBackToTaiwanAndDisabledModeNeverCallsGoogle() = runTest {
+        val model = Model()
+        val events = FoodAssessment(model, GoogleAiLookupSource { _, _ -> GoogleAiLookup(message = "Google 失敗", attempts = 2) }) {
+            NutritionLookup(reference, "台灣來源")
+        }.analyze("白飯", "200g", "維持", true).toList()
+        assertTrue(model.reference.contains("183.0 kcal"))
+        assertTrue(events.filterIsInstance<FoodAssessmentEvent.Lookup>().single().result.message.contains("Google 失敗"))
+        FoodAssessment(model, GoogleAiLookupSource { _, _ -> error("must not query Google") }) { error("must not query Taiwan") }
+            .analyze("白飯", "1份", "維持", false).toList()
+        assertEquals("", model.reference)
+    }
+
+    @Test fun explicitRetryDoesNotRunThreeSearchesOrReplaceExistingResultWithLocalEstimation() = runTest {
+        val model = Model()
+        var retries = 0
+        val google = object : GoogleAiLookupSource {
+            override suspend fun lookup(name: String, portion: String): GoogleAiLookup = error("must not start automatic lookup")
+            override suspend fun retry(name: String, portion: String): GoogleAiLookup {
+                retries++
+                return GoogleAiLookup(message = "資料不完整", attempts = 1, canRetry = true)
+            }
+        }
+        val events = mutableListOf<FoodAssessmentEvent>()
+        assertTrue(runCatching {
+            FoodAssessment(model, google) { error("must not replace with local estimate") }
+                .analyze("白飯", "1份", "維持", true, googleRetry = true).collect { events += it }
+        }.isFailure)
+        assertEquals(1, retries)
+        assertEquals("", model.reference)
+        assertTrue(events.filterIsInstance<FoodAssessmentEvent.GoogleFinished>().single().canRetry)
+        assertTrue(events.none { it is FoodAssessmentEvent.Token })
+    }
+
     private class Model(limit: Int = 4096) : GemmaLocalHelper {
         var reference = ""
         override val contextTokenLimit = flowOf(limit)

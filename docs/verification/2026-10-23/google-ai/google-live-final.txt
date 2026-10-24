@@ -1,0 +1,8 @@
+
+com.xuan.fitai.GoogleAiLookupTest:.
+
+Time: 7.378
+
+OK (1 test)
+
+

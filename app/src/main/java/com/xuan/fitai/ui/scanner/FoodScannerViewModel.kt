@@ -32,10 +32,12 @@ sealed class ScannerUiState {
         val portion: String,
         val analysis: GemmaFoodAnalysis,
         val referenceJson: String? = null,
-        val lookupMessage: String = ""
+        val lookupMessage: String = "",
+        val canRetryGoogle: Boolean = false,
+        val retryingGoogle: Boolean = false
     ) : ScannerUiState()
     data object SavedSuccess : ScannerUiState()
-    data class Error(val message: String) : ScannerUiState()
+    data class Error(val message: String, val retryFood: String? = null, val retryPortion: String? = null, val canRetryGoogle: Boolean = false) : ScannerUiState()
 }
 
 class FoodScannerViewModel(
@@ -197,21 +199,29 @@ class FoodScannerViewModel(
         }
     }
 
-    fun analyzeWithGemma(foodName: String, portion: String, useReference: Boolean = true) {
+    private var assessmentRunning = false
+    fun analyzeWithGemma(foodName: String, portion: String, useReference: Boolean = true, googleRetry: Boolean = false) {
+        if (assessmentRunning) return
+        val previous = _uiState.value as? ScannerUiState.GemmaAnalysisResult
+        assessmentRunning = true
         viewModelScope.launch {
-            if (gemmaLoadState.value != ModelLoadState.Loaded) {
+            if (!useReference && gemmaLoadState.value != ModelLoadState.Loaded) {
                 _uiState.value = ScannerUiState.Error("Gemma AI 模型尚未載入，請先前往設定頁面載入模型")
+                assessmentRunning = false
                 return@launch
             }
-            _uiState.value = ScannerUiState.GemmaAnalysisStreaming()
+            if (googleRetry && previous != null) _uiState.value = previous.copy(retryingGoogle = true)
+            else _uiState.value = ScannerUiState.GemmaAnalysisStreaming()
+            var canRetry = false
             try {
                 val goal = userProfile.value.goal
                 val response = StringBuilder()
                 var reference: String? = null
                 var message = ""
                 var status = "本地 AI 估算中…"
-                foodAssessment.analyze(foodName, portion, goal, useReference).collect { event ->
+                foodAssessment.analyze(foodName, portion, goal, useReference, googleRetry).collect { event ->
                     when (event) {
+                        is FoodAssessmentEvent.GoogleFinished -> canRetry = event.canRetry
                         is FoodAssessmentEvent.Status -> status = event.text
                         is FoodAssessmentEvent.Lookup -> {
                             reference = event.result.reference?.let(NutritionReferenceJson::encode)
@@ -219,15 +229,17 @@ class FoodScannerViewModel(
                         }
                         is FoodAssessmentEvent.Token -> response.append(event.text)
                     }
-                    _uiState.value = ScannerUiState.GemmaAnalysisStreaming(response.toString(), status, message)
+                    if (!googleRetry || previous == null) _uiState.value = ScannerUiState.GemmaAnalysisStreaming(response.toString(), status, message)
                 }
                 val analysis = NutritionPortionCalculator.apply(GemmaOutputParser.parseFoodAnalysis(response.toString()), NutritionReferenceJson.decodeOrNull(reference), portion)
-                _uiState.value = ScannerUiState.GemmaAnalysisResult(foodName, portion, analysis, NutritionReferenceJson.withSelection(reference, analysis.referenceFoodId), message)
+                _uiState.value = ScannerUiState.GemmaAnalysisResult(foodName, portion, analysis, NutritionReferenceJson.withSelection(reference, analysis.referenceFoodId), message, canRetry)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _uiState.value = ScannerUiState.Error("Gemma 分析失敗: ${e.localizedMessage}")
-            }
+                _uiState.value = if (googleRetry && previous != null)
+                    previous.copy(lookupMessage = e.localizedMessage ?: "網路 AI 未提供可用回答，原有數值已保留。", canRetryGoogle = canRetry)
+                else ScannerUiState.Error("營養分析未完成: ${e.localizedMessage}", foodName, portion, canRetry)
+            } finally { assessmentRunning = false }
         }
     }
 
@@ -239,6 +251,7 @@ class FoodScannerViewModel(
         val reference = (_uiState.value as? ScannerUiState.GemmaAnalysisResult)?.referenceJson
         viewModelScope.launch {
             try {
+                val recordedAt = System.currentTimeMillis()
                 val meal = Meal(
                     name = foodName.trim(),
                     calories = analysis.calories,
@@ -246,6 +259,8 @@ class FoodScannerViewModel(
                     carbs = analysis.carbs,
                     fat = analysis.fat,
                     portionSize = portion,
+                    timestamp = recordedAt,
+                    mealType = com.xuan.fitai.data.model.MealPeriod.forTimestamp(recordedAt),
                     isAiEstimated = true,
                     aiAdvice = analysis.advice,
                     nutritionReferenceJson = reference

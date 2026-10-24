@@ -9,16 +9,65 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class NutritionReferenceTest {
+    @Test fun liveHamPancakeLookupPreservesSourceServingAndMissingMacros() = runBlocking {
+        val foods = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            kotlinx.coroutines.withTimeout(6000) { WebNutritionScraper.searchOnce("火腿蛋餅") }
+        }
+        val food = foods.single()
+        assertEquals("火腿蛋餅", food.name)
+        assertEquals(NTU_BREAKFAST_URL, food.sourceUrl)
+        assertEquals("1份", food.servingLabel); assertFalse(food.isPer100g); assertFalse(food.hasMacros)
+        assertTrue(food.calories > 0f)
+        val reference = NutritionReference(System.currentTimeMillis(), false, foods)
+        assertEquals(reference, NutritionReferenceJson.decode(NutritionReferenceJson.encode(reference)))
+        val oldJson = NutritionReferenceJson.foodToJson(food.copy(servingLabel = "100g", hasMacros = true))
+        oldJson.remove("servingLabel"); oldJson.remove("hasMacros")
+        assertTrue(NutritionReferenceJson.foodFromJson(oldJson).isPer100g)
+        assertTrue(NutritionReferenceJson.foodFromJson(oldJson).hasMacros)
+    }
+
+    @Test fun slowWebLookupStillUsesBuiltInReference() = runBlocking {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val dir = java.io.File(context.cacheDir, "nutrition-slow-${java.util.UUID.randomUUID()}").apply { mkdirs() }
+        val isolated = object : android.content.ContextWrapper(context) { override fun getCacheDir() = dir }
+        try {
+            val start = android.os.SystemClock.elapsedRealtime()
+            val result = TfdaNutritionRepository(isolated, webSearch = { kotlinx.coroutines.delay(10_000); emptyList() }).lookup("起司蛋餅")
+            assertTrue(result.reference!!.foods.any { it.name == "起司蛋餅" })
+            assertTrue(android.os.SystemClock.elapsedRealtime() - start < 8000)
+            assertTrue(result.reference!!.fromCache)
+        } finally { dir.deleteRecursively() }
+    }
+
+    @Test fun cachedWebKeepsAcquisitionTimeAndOriginalPage() = runBlocking {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val dir = java.io.File(context.cacheDir, "nutrition-web-${java.util.UUID.randomUUID()}").apply { mkdirs() }
+        val isolated = object : android.content.ContextWrapper(context) { override fun getCacheDir() = dir }
+        var queries = 0
+        val source = "https://www.fatsecret.cn/food/original"
+        try {
+            val repository = TfdaNutritionRepository(isolated, webSearch = {
+                queries++; listOf(NutritionFood("WEB-1", "雞蛋", "", "每100g", 150f, 13f, 1f, 11f, sourceUrl = source))
+            })
+            val fresh = repository.lookup("雞蛋").reference!!
+            val cached = repository.lookup("雞蛋").reference!!
+            assertEquals(1, queries); assertFalse(fresh.fromCache); assertTrue(cached.fromCache)
+            assertEquals(fresh.fetchedAt, cached.fetchedAt)
+            assertEquals(source, NutritionReferenceJson.decode(NutritionReferenceJson.encode(cached)).foods.single().sourceUrl)
+            assertFalse(cached.foods.single().copy(sourceUrl = "javascript:alert(1)").isValid())
+        } finally { dir.deleteRecursively() }
+    }
+
     @Test fun liveOfficialDownloadAndCacheWorkWithinBudget() = runBlocking {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val dir = java.io.File(context.cacheDir, "nutrition-network-test-${java.util.UUID.randomUUID()}").apply { mkdirs() }
         val isolated = object : android.content.ContextWrapper(context) { override fun getCacheDir() = dir }
         try {
-            val first = kotlinx.coroutines.withTimeout(20_000) { TfdaNutritionRepository(isolated).lookup("白飯") }
+            val first = kotlinx.coroutines.withTimeout(20_000) { TfdaNutritionRepository(isolated, webSearch = { emptyList() }).lookup("白飯") }
             assertNotNull(first.message, first.reference)
             assertFalse(first.reference!!.fromCache)
             assertEquals(183f, first.reference!!.foods.single().calories)
-            val cached = TfdaNutritionRepository(isolated).lookup("牛肉")
+            val cached = TfdaNutritionRepository(isolated, webSearch = { emptyList() }).lookup("牛肉")
             assertTrue(cached.reference!!.fromCache)
             assertEquals(5, cached.reference!!.foods.size)
         } finally { dir.deleteRecursively() }

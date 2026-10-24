@@ -1,0 +1,8 @@
+
+com.xuan.fitai.MultiAiUiTest:...
+
+Time: 4.148
+
+OK (3 tests)
+
+

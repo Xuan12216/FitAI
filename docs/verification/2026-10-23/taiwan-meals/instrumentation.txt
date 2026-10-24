@@ -1,0 +1,13 @@
+
+com.xuan.fitai.AdaptiveBottomSheetTest:....
+com.xuan.fitai.AdaptiveLayoutTest:.....
+com.xuan.fitai.AutoBackupSchedulingTest:..
+com.xuan.fitai.MealGroupTest:.
+com.xuan.fitai.NutritionReferenceTest:.......
+com.xuan.fitai.RecordIntegrityTest:......
+
+Time: 74.822
+
+OK (25 tests)
+
+

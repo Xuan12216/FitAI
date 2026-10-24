@@ -1,0 +1,72 @@
+
+com.xuan.fitai.MultiAiLookupTest:GOOGLE: usable=false attempts=1 outcome=INCOMPLETE model=null fast=null sources=1 message=網路 AI 已回覆，但餐點名稱、份量或營養數值不完整；已達 1 次上限，改用台灣資料。
+BRAVE: usable=true attempts=1 outcome=SUCCESS model=null fast=null sources=1 message=已取得 Brave AI 營養估算；本次網路查詢 1 次。
+DUCK: usable=false attempts=1 outcome=INCOMPLETE model=GPT-6 Luna fast=true sources=3 message=網路 AI 已回覆，但餐點名稱、份量或營養數值不完整；已達 1 次上限，改用台灣資料。
+
+Error in optInLiveProvidersRetainActualIdentityAndCitations(com.xuan.fitai.MultiAiLookupTest):
+java.lang.AssertionError: GOOGLE: usable=false attempts=1 outcome=INCOMPLETE model=null fast=null sources=1 message=網路 AI 已回覆，但餐點名稱、份量或營養數值不完整；已達 1 次上限，改用台灣資料。 text=火腿蛋餅、每1份、熱量281kcal、蛋白質、碳水、脂肪https://meals.ntu.edu.tw/CampusDining/kcal/breakfast 
+膳食協調委員會
+如果您需要查詢其他餐點的營養資料，請告訴我。
+AI 可能會出錯，請查證回覆內容
+膳食協調委員會
+國立臺灣大學膳食協調委員會熱量表【早餐類】
+司蛋餅(Chinese omelet with cheese), 300. 培根蛋餅(Chinese omelet with bacon), 298. 火腿蛋餅(Chinese omelet with ham), 281. 熱狗蛋餅(Chinese omelet with hotdog) 蔬菜蛋餅(Chinese om...
+DUCK: usable=false attempts=1 outcome=INCOMPLETE model=GPT-6 Luna fast=true sources=3 message=網路 AI 已回覆，但餐點名稱、份量或營養數值不完整；已達 1 次上限，改用台灣資料。 text=Duck.ai 說
+GPT-6 Luna
+
+火腿蛋餅、每1份：熱量、蛋白質、碳水、脂肪資料不足；https://health.ettoday.net/news/1029019 
+ettoday.net
+
+閱讀更多
+1份蛋餅＝半碗飯？這「8種口味」蛋餅超NG...培根竟上榜
+ettoday.net
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.xuan.fitai.MultiAiLookupTest$optInLiveProvidersRetainActualIdentityAndCitations$1.invokeSuspend(MultiAiLookupTest.kt:80)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:101)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:95)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:69)
+	at kotlinx.coroutines.BuildersKt.runBlocking(dex-id-649335b96e5e17940169db2070728945c5822c0c:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:47)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(dex-id-649335b96e5e17940169db2070728945c5822c0c:1)
+	at com.xuan.fitai.MultiAiLookupTest.optInLiveProvidersRetainActualIdentityAndCitations(MultiAiLookupTest.kt:47)
+
+
+Time: 23.878
+There was 1 failure:
+1) optInLiveProvidersRetainActualIdentityAndCitations(com.xuan.fitai.MultiAiLookupTest)
+java.lang.AssertionError: GOOGLE: usable=false attempts=1 outcome=INCOMPLETE model=null fast=null sources=1 message=網路 AI 已回覆，但餐點名稱、份量或營養數值不完整；已達 1 次上限，改用台灣資料。 text=火腿蛋餅、每1份、熱量281kcal、蛋白質、碳水、脂肪https://meals.ntu.edu.tw/CampusDining/kcal/breakfast 
+膳食協調委員會
+如果您需要查詢其他餐點的營養資料，請告訴我。
+AI 可能會出錯，請查證回覆內容
+膳食協調委員會
+國立臺灣大學膳食協調委員會熱量表【早餐類】
+司蛋餅(Chinese omelet with cheese), 300. 培根蛋餅(Chinese omelet with bacon), 298. 火腿蛋餅(Chinese omelet with ham), 281. 熱狗蛋餅(Chinese omelet with hotdog) 蔬菜蛋餅(Chinese om...
+DUCK: usable=false attempts=1 outcome=INCOMPLETE model=GPT-6 Luna fast=true sources=3 message=網路 AI 已回覆，但餐點名稱、份量或營養數值不完整；已達 1 次上限，改用台灣資料。 text=Duck.ai 說
+GPT-6 Luna
+
+火腿蛋餅、每1份：熱量、蛋白質、碳水、脂肪資料不足；https://health.ettoday.net/news/1029019 
+ettoday.net
+
+閱讀更多
+1份蛋餅＝半碗飯？這「8種口味」蛋餅超NG...培根竟上榜
+ettoday.net
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.xuan.fitai.MultiAiLookupTest$optInLiveProvidersRetainActualIdentityAndCitations$1.invokeSuspend(MultiAiLookupTest.kt:80)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:101)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:95)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:69)
+	at kotlinx.coroutines.BuildersKt.runBlocking(dex-id-649335b96e5e17940169db2070728945c5822c0c:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:47)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(dex-id-649335b96e5e17940169db2070728945c5822c0c:1)
+	at com.xuan.fitai.MultiAiLookupTest.optInLiveProvidersRetainActualIdentityAndCitations(MultiAiLookupTest.kt:47)
+
+FAILURES!!!
+Tests run: 1,  Failures: 1
+
+

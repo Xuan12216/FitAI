@@ -1,0 +1,10 @@
+
+com.xuan.fitai.MultiAiLookupTest:.BRAVE: usable=true attempts=1 outcome=SUCCESS model=null sources=1 message=已取得 Brave AI 營養估算；本次網路查詢 1 次。
+DUCK: usable=true attempts=1 outcome=SUCCESS model=GPT-6 Luna sources=3 message=已取得 Duck.ai / GPT-6 Luna 營養估算；本次網路查詢 1 次。
+.
+
+Time: 23
+
+OK (2 tests)
+
+

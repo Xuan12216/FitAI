@@ -11,6 +11,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -22,41 +23,133 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.zip.ZipInputStream
 
-/** Downloads the public dataset as a whole. No food query, photo or profile is uploaded. */
-class TfdaNutritionRepository(context: Context) : NutritionLookupSource {
+/** Taiwan public meal tables plus TFDA's dataset, supplemented by marked approximate recipes. */
+class TfdaNutritionRepository(
+    context: Context,
+    private val webSearch: suspend (String) -> List<NutritionFood> = WebNutritionScraper::searchOnce,
+) : NutritionLookupSource {
     private val cache = AtomicFile(File(context.cacheDir, "tfda-nutrition-v1.json"))
     private val mutex = Mutex()
     private var memory: Pair<Long, List<NutritionFood>>? = null
+    private val webCache = object : LinkedHashMap<String, Pair<Long, List<NutritionFood>>>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<Long, List<NutritionFood>>>?): Boolean = size > 100
+    }
 
     override suspend fun lookup(foodName: String): NutritionLookup = withContext(Dispatchers.IO) {
         mutex.withLock {
+            // One bounded Taiwan public meal page; food ingredients fall back to TFDA.
+            val cacheKey = foodName.trim().lowercase()
+            val cachedWeb = webCache[cacheKey]?.takeIf { System.currentTimeMillis() - it.first in 0 until 24 * 60 * 60 * 1000L }
+            var webFetchedAt = cachedWeb?.first ?: System.currentTimeMillis()
+            val webFoods = if (cachedWeb != null) {
+                cachedWeb.second
+            } else {
+                val scraped = try { withTimeoutOrNull(3000) { webSearch(foodName) }.orEmpty() }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { emptyList() }
+                if (scraped.isNotEmpty()) {
+                    webFetchedAt = System.currentTimeMillis()
+                    webCache[cacheKey] = webFetchedAt to scraped
+                }
+                scraped
+            }
+
+            // Step 2 (Supplement / Fallback): Local Taiwanese Common Foods + TFDA dataset
             val old = memory ?: readCache()?.also { memory = it }
             val now = System.currentTimeMillis()
-            if (old != null && now - old.first in 0 until 7 * 24 * 60 * 60 * 1000L) {
-                return@withLock match(foodName, old, true)
+            var tfdaFromCache = true
+            val tfdaData: Pair<Long, List<NutritionFood>> = if (old != null && now - old.first in 0 until 7 * 24 * 60 * 60 * 1000L) {
+                old
+            } else if (webFoods.isEmpty() && NutritionMatcher.find(foodName, TaiwaneseCommonFoods.ALL).isEmpty()) {
+                // Only block on downloading the 5 MB TFDA dataset if web scraper didn't already find enough
+                try {
+                    val foods = withTimeoutOrNull(16_000) { download() } ?: return@withLock combineResults(
+                        foodName, webFoods, cachedWeb != null, webFetchedAt, old ?: (now to emptyList()), true)
+                    require(foods.size in 1000..10000) { "營養資料不完整" }
+                    (System.currentTimeMillis() to foods).also { fresh ->
+                        memory = fresh
+                        tfdaFromCache = false
+                        runCatching { writeCache(fresh) }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    android.util.Log.w("FitAI_Nutrition", "Public nutrition dataset unavailable", error)
+                    old ?: (now to emptyList())
+                }
+            } else {
+                old ?: (now to emptyList())
             }
-            try {
-                val foods = download()
-                require(foods.size in 1000..10000) { "營養資料不完整" }
-                val fresh = System.currentTimeMillis() to foods
-                memory = fresh
-                // A full cache or a temporary disk failure must not discard a valid download.
-                runCatching { writeCache(fresh) }
-                match(foodName, fresh, false)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                android.util.Log.w("FitAI_Nutrition", "Public nutrition dataset unavailable", error)
-                if (old != null) match(foodName, old, true, "更新失敗，使用已下載的資料。")
-                else NutritionLookup(message = "營養資料暫時無法取得，已改用本地估算。")
-            }
+
+            combineResults(
+                query = foodName,
+                webFoods = webFoods,
+                webFromCache = cachedWeb != null,
+                webFetchedAt = webFetchedAt,
+                tfdaData = tfdaData,
+                tfdaFromCache = tfdaFromCache
+            )
         }
     }
 
-    private fun match(query: String, data: Pair<Long, List<NutritionFood>>, cached: Boolean, prefix: String = ""): NutritionLookup {
-        val foods = NutritionMatcher.find(query, data.second)
-        return if (foods.isEmpty()) NutritionLookup(message = "${prefix}沒有符合名稱的營養資料，使用本地估算。")
-        else NutritionLookup(NutritionReference(data.first, cached, foods), "${prefix}已提供食藥署營養資料，繼續由本地 AI 估算。")
+    private fun combineResults(
+        query: String,
+        webFoods: List<NutritionFood>,
+        webFromCache: Boolean,
+        webFetchedAt: Long,
+        tfdaData: Pair<Long, List<NutritionFood>>,
+        tfdaFromCache: Boolean,
+    ): NutritionLookup {
+        val taggedTfda = tfdaData.second.map { food ->
+            if (food.description.startsWith("【來源：")) food
+            else food.copy(description = "【來源：衛福部食藥署 TFDA】${food.description}".take(400))
+        }
+        val localMatches = NutritionMatcher.find(query, TaiwaneseCommonFoods.ALL + taggedTfda)
+
+        // Put Step 1 (Web Scraper) results first, supplemented by exact/top Step 2 local matches up to 5 items
+        val merged = buildList {
+            // If local database has an exact name match (e.g. "起司蛋餅", "紅燒牛肉麵") not literally named in webFoods,
+            // include it right alongside the web scraper results so the AI gets both!
+            addAll(webFoods.take(3))
+            for (local in localMatches) {
+                if (size >= 5) break
+                if (none { it.name == local.name }) {
+                    add(local)
+                }
+            }
+            if (size < 5) {
+                for (extraWeb in webFoods.drop(3)) {
+                    if (size >= 5) break
+                    if (none { it.name == extraWeb.name }) add(extraWeb)
+                }
+            }
+        }
+
+        if (merged.isEmpty()) {
+            return NutritionLookup(message = "沒有可靠的相符營養資料，使用本地 AI 估算。")
+        }
+
+        val webCount = merged.count { it.id.startsWith("WEB-") }
+        val twCount = merged.count { it.id.startsWith("TW-") }
+        val tfdaCount = merged.size - webCount - twCount
+
+        val parts = buildList {
+            if (webCount > 0) add("網路營養資料 ${webCount}筆")
+            if (twCount > 0) add("內建配方估算 ${twCount}筆")
+            if (tfdaCount > 0) add("食藥署(TFDA) ${tfdaCount}筆")
+        }
+        val summaryText = if (webCount > 0) {
+            "資料來源：${parts.joinToString(" ＋ ")}。"
+        } else {
+            "網路未找到可用資料，改由 ${parts.joinToString(" ＋ ")} 提供參考。"
+        }
+
+        return NutritionLookup(
+            reference = NutritionReference(
+                buildList { if (webCount > 0) add(webFetchedAt); if (tfdaCount > 0) add(tfdaData.first) }.minOrNull() ?: System.currentTimeMillis(),
+                (webCount == 0 || webFromCache) && (tfdaCount == 0 || tfdaFromCache), merged),
+            message = summaryText
+        )
     }
 
     private suspend fun download(): List<NutritionFood> {

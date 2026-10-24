@@ -1,0 +1,5 @@
+牛肉麵: 104.3 kcal/100g, original=https://www.fatsecret.cn/%E7%83%AD%E9%87%8F%E8%90%A5%E5%85%BB/%E6%99%AE%E9%80%9A%E7%9A%84/%E7%89%9B%E8%82%89%E9%BA%B5
+麥香魚: no incorrect built-in alias
+低脂鮮奶: no incorrect built-in alias
+無糖鮮奶茶: no incorrect built-in alias
+滷海帶: no incorrect built-in alias

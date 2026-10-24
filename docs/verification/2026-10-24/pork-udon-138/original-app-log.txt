@@ -1,0 +1,10 @@
+--------- beginning of main
+10-24 10:12:04.254  5033  5033 I FitAI_WebAI: reason=nutrition-ready elapsedMs=4571 pageFinishedMs=1481 firstAnswerMs=3239 inspections=7 chars=519 sources=2 fast=null usable=true blocked=false
+10-24 10:16:12.259  5968  5968 I FitAI_WebAI: reason=deadline-without-answer elapsedMs=25128 pageFinishedMs=749 firstAnswerMs=-1 inspections=162 chars=0 sources=0 fast=null usable=false blocked=false
+10-24 10:16:12.284  5968  5968 I FitAI_Traffic: provider=Duck.ai requests=1 minute=1 cache=0 suppressed=0 outcome=TIMEOUT elapsedMs=25154 http=null
+10-24 10:16:16.713  5968  5968 I FitAI_WebAI: reason=answer-stable elapsedMs=4429 pageFinishedMs=1047 firstAnswerMs=3123 inspections=7 chars=92 sources=1 fast=null usable=false blocked=false
+10-24 10:16:16.725  5968  5968 I FitAI_Traffic: provider=Google AI requests=2 minute=2 cache=0 suppressed=0 outcome=INCOMPLETE elapsedMs=4441 http=null
+10-24 10:16:41.735  5968  5968 I FitAI_WebAI: reason=deadline-without-answer elapsedMs=25009 pageFinishedMs=385 firstAnswerMs=-1 inspections=38 chars=0 sources=0 fast=null usable=false blocked=false
+10-24 10:16:41.739  5968  5968 I FitAI_Traffic: provider=Brave AI requests=3 minute=3 cache=0 suppressed=0 outcome=TIMEOUT elapsedMs=25013 http=null
+10-24 10:17:10.668  5968  5968 I FitAI_WebAI: reason=answer-stable elapsedMs=12609 pageFinishedMs=10899 firstAnswerMs=11299 inspections=24 chars=114 sources=3 fast=true usable=false blocked=false
+10-24 10:17:10.676  5968  5968 I FitAI_Traffic: provider=Duck.ai requests=4 minute=3 cache=0 suppressed=0 outcome=INCOMPLETE elapsedMs=12617 http=null

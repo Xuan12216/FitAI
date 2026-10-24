@@ -69,7 +69,9 @@ class ChatViewModel(
 
     suspend fun saveMealFromChat(name: String, calories: Float, protein: Float, carbs: Float, fat: Float) {
         require(name.isNotBlank() && listOf(calories, protein, carbs, fat).all { it.isFinite() && it >= 0 })
-        mealRepository.insertMeal(com.xuan.fitai.data.model.Meal(name = name, calories = calories, protein = protein, carbs = carbs, fat = fat))
+        val recordedAt = System.currentTimeMillis()
+        mealRepository.insertMeal(com.xuan.fitai.data.model.Meal(name = name, calories = calories, protein = protein, carbs = carbs, fat = fat,
+            timestamp = recordedAt, mealType = com.xuan.fitai.data.model.MealPeriod.forTimestamp(recordedAt)))
     }
 
     fun sendMessage(

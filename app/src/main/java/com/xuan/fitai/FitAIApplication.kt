@@ -36,6 +36,7 @@ class FitAIApplication : Application() {
     lateinit var classifierHelper: FoodClassifierHelper
     lateinit var modelManager: ModelManager
     lateinit var healthConnectHelper: HealthConnectHelper
+    val googleAiTrafficMonitor = com.xuan.fitai.nutrition.GoogleAiTrafficMonitor()
     lateinit var foodAssessment: com.xuan.fitai.nutrition.FoodAssessment
 
     override fun onCreate() {
@@ -62,7 +63,8 @@ class FitAIApplication : Application() {
         }
         
         gemmaHelper = GemmaLocalHelperImpl(this)
-        foodAssessment = com.xuan.fitai.nutrition.FoodAssessment(gemmaHelper, com.xuan.fitai.nutrition.TfdaNutritionRepository(this))
+        foodAssessment = com.xuan.fitai.nutrition.FoodAssessment(gemmaHelper,
+            com.xuan.fitai.nutrition.GoogleAiNutritionSource.create(this, googleAiTrafficMonitor), com.xuan.fitai.nutrition.TfdaNutritionRepository(this))
         classifierHelper = FoodClassifierHelperImpl(this)
         modelManager = ModelManager(this, modelRepository, userPreferenceStore, gemmaHelper, classifierHelper)
         healthConnectHelper = HealthConnectHelper(this)
