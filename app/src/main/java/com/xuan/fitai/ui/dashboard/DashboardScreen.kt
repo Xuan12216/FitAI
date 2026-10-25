@@ -1,11 +1,11 @@
 package com.xuan.fitai.ui.dashboard
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -24,6 +24,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.xuan.fitai.data.model.Meal
 import com.xuan.fitai.data.model.MealPeriod
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import com.xuan.fitai.data.model.ModelLoadState
@@ -210,10 +211,19 @@ fun DashboardScreen(
         }
 
         fun LazyListScope.historyItems() {
+            val friendlyMealDate = when (mealDate) {
+                today -> "今天 (${mealDate.monthValue}/${mealDate.dayOfMonth})"
+                today.minusDays(1) -> "昨天 (${mealDate.monthValue}/${mealDate.dayOfMonth})"
+                else -> "${mealDate.monthValue}月${mealDate.dayOfMonth}日"
+            }
             item(key = HISTORY_HEADER_KEY) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        if (mealDate == today) "今日餐點" else "$mealDate 餐點",
+                        when (mealDate) {
+                            today -> "今日餐點"
+                            today.minusDays(1) -> "昨日餐點"
+                            else -> "${mealDate.monthValue}/${mealDate.dayOfMonth} 餐點"
+                        },
                         Modifier.weight(1f),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
@@ -244,7 +254,7 @@ fun DashboardScreen(
                         ) {
                             Icon(Icons.Default.CalendarToday, null, Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text(mealDate.toString(), fontWeight = FontWeight.SemiBold)
+                            Text(friendlyMealDate, fontWeight = FontWeight.SemiBold)
                         }
                         if (mealDate != today) {
                             TextButton(onClick = { viewModel.selectMealDate(today) }) {
@@ -441,116 +451,115 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun MealLogCard(
+private fun MealLogRow(
     meal: Meal,
     onDelete: () -> Unit,
     onEdit: () -> Unit,
     onRepeat: () -> Unit
 ) {
-    Card(
-        modifier = Modifier
+    Column(
+        Modifier
             .fillMaxWidth()
-            .clickable(onClick = onEdit),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            .clickable(onClick = onEdit)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+        // Top Row: Name + Time/Portion + Quick Actions
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Top Row: Name + Time/Portion + Quick Actions
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        if (meal.isFavorite) {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = "常用餐點",
-                                tint = MaterialTheme.colorScheme.tertiary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        Text(
-                            text = meal.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (meal.isFavorite) {
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = "常用餐點",
+                            tint = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
-                    val time = Instant.ofEpochMilli(meal.timestamp)
-                        .atZone(ZoneId.systemDefault())
-                        .format(DateTimeFormatter.ofPattern("HH:mm"))
-                    val hasRefBadge = remember(meal.nutritionReferenceJson) {
-                        com.xuan.fitai.nutrition.NutritionReferenceJson.decodeOrNull(meal.nutritionReferenceJson) != null
-                    }
-                    val sourceSubtext = when {
-                        hasRefBadge -> ""
-                        meal.isAiEstimated -> " · ${com.xuan.fitai.nutrition.nutritionEstimatorLabel(meal.nutritionReferenceJson, true)} 估算"
-                        else -> " · 手動記錄"
-                    }
                     Text(
-                        text = "$time · ${meal.portionSize}$sourceSubtext",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = meal.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
-
-                // Compact Action Pill & Delete Button
-                FilledTonalButton(
-                    onClick = onRepeat,
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    modifier = Modifier.height(32.dp)
-                ) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("再記一次", style = MaterialTheme.typography.labelMedium)
-                }
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.DeleteOutline,
-                        contentDescription = "刪除${meal.name}",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            // Middle Row: Calories + Macro Pills
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+                val time = Instant.ofEpochMilli(meal.timestamp)
+                    .atZone(ZoneId.systemDefault())
+                    .format(DateTimeFormatter.ofPattern("HH:mm"))
                 Text(
-                    text = "${meal.calories.toInt()} kcal",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    text = "$time  ·  ${meal.portionSize}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    MacroBadge("蛋白 ${meal.protein.toInt()}g")
-                    MacroBadge("碳水 ${meal.carbs.toInt()}g")
-                    MacroBadge("脂肪 ${meal.fat.toInt()}g")
-                }
-            }
-
-            NutritionReferenceBadge(meal.nutritionReferenceJson)
-
-            if (!meal.aiAdvice.isNullOrBlank()) {
                 Text(
-                    text = meal.aiAdvice,
-                    style = MaterialTheme.typography.bodySmall,
+                    text = com.xuan.fitai.nutrition.nutritionEstimatorLabel(meal.nutritionReferenceJson, meal.isAiEstimated)
+                        ?.let { "$it 估算" } ?: "手動記錄",
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+
+            // Compact Action Pill & Delete Button
+            FilledTonalButton(
+                onClick = onRepeat,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                modifier = Modifier.height(32.dp)
+            ) {
+                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("再記一次", style = MaterialTheme.typography.labelMedium)
+            }
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.DeleteOutline,
+                    contentDescription = "刪除${meal.name}",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        // Middle Row: Calories + Macro Pills
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "${meal.calories.toInt()} kcal",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                MacroBadge("蛋白 ${meal.protein.toInt()}g")
+                MacroBadge("碳水 ${meal.carbs.toInt()}g")
+                MacroBadge("脂肪 ${meal.fat.toInt()}g")
+            }
+        }
+
+        NutritionReferenceBadge(meal.nutritionReferenceJson)
+
+        if (!meal.aiAdvice.isNullOrBlank()) {
+            val cleanAdvice = remember(meal.aiAdvice) {
+                com.xuan.fitai.ui.components.parseMarkdownToAnnotatedString(
+                    com.xuan.fitai.ui.components.extractAnswerWithoutThinking(meal.aiAdvice)
+                )
+            }
+            Text(
+                text = cleanAdvice,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -584,33 +593,70 @@ internal fun LazyListScope.mealGroupItems(
 ) {
     item(key = "type-$type") {
         Card(
-            onClick = onToggle,
-            modifier = Modifier.fillMaxWidth().semantics { stateDescription = if (expanded) "已展開" else "已收合" },
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         ) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(type, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("${records.size} 筆 · ${records.sumOf { it.calories.toDouble() }.toInt()} kcal",
-                        style = MaterialTheme.typography.labelLarge)
-                    Spacer(Modifier.width(6.dp))
-                    Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        if (expanded) "收合$type" else "展開$type")
+            Surface(
+                onClick = onToggle,
+                modifier = Modifier.fillMaxWidth().semantics {
+                    heading()
+                    stateDescription = if (expanded) "已展開" else "已收合"
+                },
+                color = MaterialTheme.colorScheme.surfaceContainerHigh
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                            Icon(
+                                when (type) {
+                                    "早餐" -> Icons.Default.BreakfastDining
+                                    "午餐" -> Icons.Default.LunchDining
+                                    "晚餐" -> Icons.Default.DinnerDining
+                                    "宵夜" -> Icons.Default.Bedtime
+                                    else -> Icons.Default.Restaurant
+                                },
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(8.dp).size(20.dp)
+                            )
+                        }
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(type, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("${records.size} 筆餐點", style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text("${records.sumOf { it.calories.toDouble() }.toInt()} kcal",
+                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary)
+                        Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            if (expanded) "收合$type" else "展開$type")
+                    }
+                    Text(
+                        String.format(Locale.ROOT, "蛋白質 %.1fg · 碳水 %.1fg · 脂肪 %.1fg",
+                            records.sumOf { it.protein.toDouble() }, records.sumOf { it.carbs.toDouble() }, records.sumOf { it.fat.toDouble() }),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (!expanded) Text(
+                        records.take(3).joinToString("、") { it.name } + if (records.size > 3) " 等 ${records.size} 筆，點擊展開" else "，點擊展開",
+                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-                Text(
-                    String.format(Locale.ROOT, "蛋白質 %.1fg · 碳水 %.1fg · 脂肪 %.1fg",
-                        records.sumOf { it.protein.toDouble() }, records.sumOf { it.carbs.toDouble() }, records.sumOf { it.fat.toDouble() }),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (!expanded) Text(
-                    records.take(3).joinToString("、") { it.name } + if (records.size > 3) " 等 ${records.size} 筆，點擊展開" else "，點擊展開",
-                    maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            }
+            if (expanded) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                records.forEachIndexed { index, meal ->
+                    key(meal.id) {
+                        MealLogRow(meal, onDelete = { onDelete(meal) }, onEdit = { onEdit(meal) }, onRepeat = { onRepeat(meal) })
+                        if (index < records.lastIndex) HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+                    }
+                }
             }
         }
-    }
-    if (expanded) items(records, key = { "meal-${it.id}" }) { meal ->
-        MealLogCard(meal, onDelete = { onDelete(meal) }, onEdit = { onEdit(meal) }, onRepeat = { onRepeat(meal) })
     }
 }

@@ -39,18 +39,30 @@ fun interface GoogleAiPageSource {
 
 object GoogleAiWaitPolicy {
     const val PREPARATION_TIMEOUT_MS = 8_000L
-    const val FIRST_ANSWER_TIMEOUT_MS = 9_500L
-    const val PAGE_TIMEOUT_MS = 14_000L
-    const val TOTAL_TIMEOUT_MS = 38_000L
-    const val MANUAL_TIMEOUT_MS = 16_000L
+    const val ANSWER_TIMEOUT_MS = 30_000L
+    const val PAGE_TIMEOUT_MS = PREPARATION_TIMEOUT_MS + ANSWER_TIMEOUT_MS
+    const val TOTAL_TIMEOUT_MS = PAGE_TIMEOUT_MS * 3 + 2_000L
+    const val MANUAL_TIMEOUT_MS = TOTAL_TIMEOUT_MS
     const val PREPARATION_POLL_MS = 150L
     const val ANSWER_POLL_MS = 500L
-    fun preparationTimedOut(page: GoogleAiPage, elapsedMs: Long): Boolean =
-        page.preparing && elapsedMs >= PREPARATION_TIMEOUT_MS
-    fun firstAnswerTimedOut(page: GoogleAiPage, firstAnswerAt: Long, elapsedMs: Long): Boolean =
-        !page.preparing && firstAnswerAt < 0 && page.text.isBlank() && elapsedMs >= FIRST_ANSWER_TIMEOUT_MS
     fun inspectionDelay(page: GoogleAiPage?): Long = if (page?.preparing == true)
         PREPARATION_POLL_MS else ANSWER_POLL_MS
+}
+
+/** Form setup consumes its own budget. The answer clock starts only after submission. */
+internal class GoogleAiDeadlineTracker(preparesQuery: Boolean) {
+    var answerStartedAt: Long? = if (preparesQuery) null else 0L
+        private set
+
+    fun observe(page: GoogleAiPage, elapsedMs: Long) {
+        if (answerStartedAt == null && page.preparationStage == "sent") answerStartedAt = elapsedMs
+    }
+
+    fun preparationTimedOut(elapsedMs: Long): Boolean =
+        answerStartedAt == null && elapsedMs >= GoogleAiWaitPolicy.PREPARATION_TIMEOUT_MS
+
+    fun answerTimedOut(elapsedMs: Long): Boolean =
+        answerStartedAt?.let { elapsedMs - it >= GoogleAiWaitPolicy.ANSWER_TIMEOUT_MS } ?: false
 }
 
 /** Nutrition facts may be complete while Google keeps appending explanations or search results. */
@@ -83,18 +95,13 @@ class GoogleAiPageLoader(context: Context) : GoogleAiPageSource {
         val provider = WebAiProvider.fromUrl(url)
             ?: return@withContext GoogleAiPage(failure = "AI 查詢網址不在允許清單。")
         val query = android.net.Uri.parse(url).getQueryParameter("q").orEmpty()
-        val extractScript = when (provider) {
-            WebAiProvider.GOOGLE -> EXTRACT_ANSWER
-            WebAiProvider.GEMINI -> geminiScript(query)
-            WebAiProvider.CHATGPT -> chatGptScript(query)
-            WebAiProvider.BRAVE -> EXTRACT_BRAVE
-            WebAiProvider.DUCK -> duckScript(query)
-        }
+        val extractScript = extractionScript(provider, query)
         suspendCancellableCoroutine { continuation ->
             val handler = Handler(Looper.getMainLooper())
             var web: WebView? = null
             var finished = false
             val readiness = GoogleAiReadinessTracker()
+            val deadline = GoogleAiDeadlineTracker(provider in setOf(WebAiProvider.DUCK, WebAiProvider.GEMINI, WebAiProvider.CHATGPT))
             val start = SystemClock.elapsedRealtime()
             var pageFinishedAt = -1L
             var firstAnswerAt = -1L
@@ -113,6 +120,11 @@ class GoogleAiPageLoader(context: Context) : GoogleAiPageSource {
                 cleanup()
                 if (continuation.isActive) continuation.resume(page)
             }
+            val answerTimeout = Runnable {
+                val partial = lastPage
+                if (partial != null && partial.text.isNotBlank()) finish(partial, "deadline-with-answer")
+                else finish((partial ?: GoogleAiPage()).copy(failure = "${provider.label} 回答等待逾時（30 秒）。"), "deadline-without-answer")
+            }
             val inspect = object : Runnable {
                 override fun run() {
                     if (finished || !continuation.isActive) return
@@ -122,15 +134,19 @@ class GoogleAiPageLoader(context: Context) : GoogleAiPageSource {
                         inspections++
                         if (page != null) {
                             lastPage = page
+                            val wasPreparing = deadline.answerStartedAt == null
+                            deadline.observe(page, SystemClock.elapsedRealtime() - start)
+                            if (wasPreparing && deadline.answerStartedAt != null) {
+                                handler.postDelayed(answerTimeout, GoogleAiWaitPolicy.ANSWER_TIMEOUT_MS)
+                            }
                             if (page.text.isNotBlank() && firstAnswerAt < 0) firstAnswerAt = SystemClock.elapsedRealtime() - start
                         }
                         when {
                             page?.blocked == true -> finish(page)
                             page?.failure != null -> finish(page)
-                            page != null && GoogleAiWaitPolicy.preparationTimedOut(page, SystemClock.elapsedRealtime() - start) ->
+                            page != null && deadline.preparationTimedOut(SystemClock.elapsedRealtime() - start) ->
                                 finish(page.copy(failure = "${provider.label} 查詢準備逾時，尚未取得 AI 回答。"), "preparation-timeout")
-                            page != null && GoogleAiWaitPolicy.firstAnswerTimedOut(page, firstAnswerAt, SystemClock.elapsedRealtime() - start) ->
-                                finish(page.copy(failure = "${provider.label} 回應逾時，尚未取得 AI 回答。"), "first-answer-timeout")
+                            deadline.answerTimedOut(SystemClock.elapsedRealtime() - start) -> answerTimeout.run()
                             page != null -> {
                                 lastUsableKey = usableKey(page)
                                 if (readiness.observe(page, lastUsableKey)) finish(page, if (lastUsableKey != null) "nutrition-ready" else "answer-stable")
@@ -185,8 +201,7 @@ class GoogleAiPageLoader(context: Context) : GoogleAiPageSource {
                                 WebAiProvider.DUCK -> "duck.ai"
                             }
                             if (request.isForMainFrame || (response.statusCode == 429 && request.url.host == providerOrigin)) {
-                                val softBlock = provider in setOf(WebAiProvider.GEMINI, WebAiProvider.CHATGPT) && response.statusCode == 403
-                                finish(GoogleAiPage(failure = "${provider.label} 網頁暫時無法取得。", blocked = !softBlock && response.statusCode in listOf(403, 429), httpStatus = response.statusCode), "http-${response.statusCode}")
+                                finish(GoogleAiPage(failure = "${provider.label} 網頁暫時無法取得。", blocked = response.statusCode in listOf(403, 429), httpStatus = response.statusCode), "http-${response.statusCode}")
                             }
                         }
                     }
@@ -200,6 +215,7 @@ class GoogleAiPageLoader(context: Context) : GoogleAiPageSource {
                 }
                 // Inspect while resources are still loading; onPageFinished can be delayed by unrelated assets.
                 handler.postDelayed(inspect, 500)
+                if (deadline.answerStartedAt != null) handler.postDelayed(answerTimeout, GoogleAiWaitPolicy.ANSWER_TIMEOUT_MS)
                 handler.postDelayed({
                     val partial = lastPage
                     if (partial != null && partial.text.isNotBlank()) finish(partial, "deadline-with-answer")
@@ -212,6 +228,14 @@ class GoogleAiPageLoader(context: Context) : GoogleAiPageSource {
     }
 
     companion object {
+        internal fun extractionScript(provider: WebAiProvider, query: String): String = when (provider) {
+            WebAiProvider.GOOGLE -> EXTRACT_ANSWER
+            WebAiProvider.GEMINI -> geminiScript(query)
+            WebAiProvider.CHATGPT -> chatGptScript(query)
+            WebAiProvider.BRAVE -> EXTRACT_BRAVE
+            WebAiProvider.DUCK -> duckScript(query)
+        }
+
         private val EXTRACT_ANSWER = """
             (() => {
               const body = document.body ? document.body.innerText : '';
@@ -223,9 +247,6 @@ class GoogleAiPageLoader(context: Context) : GoogleAiPageSource {
               const citations = Array.from(main.querySelectorAll('a[href]')).map(a => ({title:([a.getAttribute('aria-label'),a.innerText,a.title].map(s=>(s||'').replace(/\s+/g,' ').trim()).find(Boolean)||a.hostname||'參考來源').slice(0,100),url:a.href})).filter(a => a.url.startsWith('https://') && a.url.length <= 1000).slice(0,8);
               for (const url of (main.innerText.match(/https:\/\/[^\s<>"'）)，,；;]+/g)||[]).slice(0,3)) {
                 if (!citations.some(c=>c.url===url)) citations.push({title:'AI 列出之來源',url});
-              }
-              if (citations.length === 0 && /\d+(?:\.\d+)?\s*(?:kcal|大卡|千卡)/i.test(main.innerText)) {
-                citations.push({title:'衛福部食藥署公開營養資料集',url:'https://data.gov.tw/dataset/8543'});
               }
               return JSON.stringify({text:main.innerText.slice(0,5000),tables,citations:citations.slice(0,8),blocked,failure});
             })()
@@ -241,9 +262,6 @@ class GoogleAiPageLoader(context: Context) : GoogleAiPageSource {
               const citations = Array.from(main.querySelectorAll('a[href]')).map(a => ({title:([a.getAttribute('aria-label'),a.innerText,a.title].map(s=>(s||'').replace(/\s+/g,' ').trim()).find(Boolean)||a.hostname||'參考來源').slice(0,100),url:a.href})).filter(a => a.url.startsWith('https://') && !a.url.startsWith('https://search.brave.com/')).slice(0,8);
               for (const url of (main.innerText.match(/https:\/\/[^\s<>"'）)，,；;]+/g)||[]).slice(0,3)) {
                 if (!citations.some(c=>c.url===url)) citations.push({title:'AI 列出之來源',url});
-              }
-              if (citations.length === 0 && /\d+(?:\.\d+)?\s*(?:kcal|大卡|千卡)/i.test(main.innerText)) {
-                citations.push({title:'衛福部食藥署公開營養資料集',url:'https://data.gov.tw/dataset/8543'});
               }
               return JSON.stringify({text:main.innerText.slice(0,5000),tables,citations:citations.slice(0,8),blocked});
             })()
@@ -317,14 +335,11 @@ class GoogleAiPageLoader(context: Context) : GoogleAiPageSource {
               }
               const main = document.querySelector('div[data-activeresponse="true"][id*="-assistant-message-"], div[id*="-assistant-message-"]');
               if (!main) return empty();
-              const modelLabel = (main.querySelector('[id^="heading-"]')?.innerText || 'GPT-4o mini').trim();
+              const modelLabel = (main.querySelector('[id^="heading-"]')?.innerText || '').trim();
               const tables = Array.from(main.querySelectorAll('table')).slice(0,5).map(t => Array.from(t.rows).slice(0,25).map(r => Array.from(r.cells).slice(0,8).map(c => c.innerText.slice(0,160))));
               const citations = Array.from(main.querySelectorAll('a[href]')).map(a => ({title:([a.getAttribute('aria-label'),a.innerText,a.title].map(s=>(s||'').replace(/\s+/g,' ').trim()).find(Boolean)||a.hostname||'參考來源').slice(0,100),url:a.href})).filter(a => a.url.startsWith('https://') && !a.url.startsWith('https://duck.ai/')).slice(0,8);
               for (const url of (main.innerText.match(/https:\/\/[^\s<>"'）)，,；;]+/g)||[]).slice(0,3)) {
                 if (!citations.some(c=>c.url===url)) citations.push({title:'AI 列出之來源',url});
-              }
-              if (citations.length === 0 && /\d+(?:\.\d+)?\s*(?:kcal|大卡|千卡)/i.test(main.innerText)) {
-                citations.push({title:'衛福部食藥署公開營養資料集',url:'https://data.gov.tw/dataset/8543'});
               }
               return JSON.stringify({text:main.innerText.slice(0,5000),tables,citations:citations.slice(0,8),blocked,modelLabel,preparationStage:'sent',fastMode:window.__fitAiDuckFast===true});
             })()
@@ -377,14 +392,11 @@ class GoogleAiPageLoader(context: Context) : GoogleAiPageSource {
               const responses = Array.from(document.querySelectorAll('message-content, .model-response-text, model-response .markdown, [data-message-author-role="model"]'));
               const main = responses[responses.length - 1];
               if (!main || !main.innerText.trim()) return empty();
-              const modelLabel = (document.querySelector('[data-test-id="bard-mode-menu-button"], .input-area-switch-label, .mode-title')?.innerText || 'Flash').replace(/\s+/g,' ').trim().slice(0,30);
+              const modelLabel = (document.querySelector('[data-test-id="bard-mode-menu-button"], .input-area-switch-label, .mode-title')?.innerText || '').replace(/\s+/g,' ').trim().slice(0,30);
               const tables = Array.from(main.querySelectorAll('table')).slice(0,5).map(t => Array.from(t.rows).slice(0,25).map(r => Array.from(r.cells).slice(0,8).map(c => c.innerText.slice(0,160))));
               const citations = Array.from(main.querySelectorAll('a[href]')).map(a => ({title:([a.getAttribute('aria-label'),a.innerText,a.title].map(s=>(s||'').replace(/\s+/g,' ').trim()).find(Boolean)||a.hostname||'參考來源').slice(0,100),url:a.href})).filter(a => a.url.startsWith('https://') && !a.url.includes('gemini.google.com') && !a.url.includes('accounts.google.com') && !a.url.includes('support.google.com')).slice(0,8);
               for (const url of (main.innerText.match(/https:\/\/[^\s<>"'）)，,；;]+/g)||[]).slice(0,3)) {
                 if (!citations.some(c=>c.url===url)) citations.push({title:'AI 列出之來源',url});
-              }
-              if (citations.length === 0 && /\d+(?:\.\d+)?\s*(?:kcal|大卡|千卡)/i.test(main.innerText)) {
-                citations.push({title:'衛福部食藥署公開營養資料集',url:'https://data.gov.tw/dataset/8543'});
               }
               return JSON.stringify({text:main.innerText.slice(0,5000),tables,citations:citations.slice(0,8),blocked,modelLabel,preparationStage:'sent'});
             })()
@@ -394,7 +406,7 @@ class GoogleAiPageLoader(context: Context) : GoogleAiPageSource {
             (() => {
               const body = document.body ? document.body.innerText : '';
               const blocked = new RegExp(${JSONObject.quote(AiAccessRestriction.PATTERN)}, 'i').test(body);
-              const empty = (failure=null) => JSON.stringify({text:'',tables:[],citations:[],blocked:false,failure,preparing:window.__fitAiGptStage!=='sent',preparationStage:window.__fitAiGptStage||'fill'});
+              const empty = (failure=null) => JSON.stringify({text:'',tables:[],citations:[],blocked,failure,preparing:window.__fitAiGptStage!=='sent',preparationStage:window.__fitAiGptStage||'fill'});
               if (blocked) return empty('ChatGPT 目前要求真人安全驗證或限制未登入存取。');
               const stayLoggedOut = Array.from(document.querySelectorAll('a, button')).find(el => /^(Stay logged out|保持登出狀態|保持登出|不登入繼續|不用登入)$/i.test((el.innerText||'').trim()));
               if (stayLoggedOut && Date.now()-(window.__fitAiGptDismissAt||0)>800) {
@@ -439,16 +451,13 @@ class GoogleAiPageLoader(context: Context) : GoogleAiPageSource {
               const replies = Array.from(document.querySelectorAll('[data-message-author-role="assistant"], article[data-testid^="conversation-turn-"] .markdown'));
               const main = replies[replies.length - 1];
               if (!main || !main.innerText.trim()) return empty();
-              const modelLabel = (document.querySelector('[data-testid="model-switcher-dropdown-button"], button[aria-label*="Model"], button[aria-label*="模型"]')?.innerText || 'GPT-6 Luna').replace(/\s+/g,' ').trim().slice(0,30);
+              const modelLabel = (document.querySelector('[data-testid="model-switcher-dropdown-button"], button[aria-label*="Model"], button[aria-label*="模型"]')?.innerText || '').replace(/\s+/g,' ').trim().slice(0,30);
               const tables = Array.from(main.querySelectorAll('table')).slice(0,5).map(t => Array.from(t.rows).slice(0,25).map(r => Array.from(r.cells).slice(0,8).map(c => c.innerText.slice(0,160))));
               const citations = Array.from(main.querySelectorAll('a[href]')).map(a => ({title:([a.getAttribute('aria-label'),a.innerText,a.title].map(s=>(s||'').replace(/\s+/g,' ').trim()).find(Boolean)||a.hostname||'參考來源').slice(0,100),url:a.href})).filter(a => a.url.startsWith('https://') && !a.url.includes('chatgpt.com') && !a.url.includes('openai.com')).slice(0,8);
               for (const url of (main.innerText.match(/https:\/\/[^\s<>"'）)，,；;]+/g)||[]).slice(0,3)) {
                 if (!citations.some(c=>c.url===url)) citations.push({title:'AI 列出之來源',url});
               }
-              if (citations.length === 0 && /\d+(?:\.\d+)?\s*(?:kcal|大卡|千卡)/i.test(main.innerText)) {
-                citations.push({title:'衛福部食藥署公開營養資料集',url:'https://data.gov.tw/dataset/8543'});
-              }
-              return JSON.stringify({text:main.innerText.slice(0,5000),tables,citations:citations.slice(0,8),blocked:false,modelLabel,preparationStage:'sent'});
+              return JSON.stringify({text:main.innerText.slice(0,5000),tables,citations:citations.slice(0,8),blocked,modelLabel,preparationStage:'sent'});
             })()
         """.trimIndent()
 

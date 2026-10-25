@@ -77,7 +77,7 @@ class FoodAssessmentTest {
         assertEquals("", model.reference)
     }
 
-    @Test fun explicitRetryDoesNotRunThreeSearchesOrReplaceExistingResultWithLocalEstimation() = runTest {
+    @Test fun explicitRetryInvokesRetryRoundAndNeverReplacesExistingResultWithLocalEstimation() = runTest {
         val model = Model()
         var retries = 0
         val google = object : GoogleAiLookupSource {
@@ -96,6 +96,23 @@ class FoodAssessmentTest {
         assertEquals("", model.reference)
         assertTrue(events.filterIsInstance<FoodAssessmentEvent.GoogleFinished>().single().canRetry)
         assertTrue(events.none { it is FoodAssessmentEvent.Token })
+    }
+
+    @Test fun retryRoundTimeoutKeepsOldValuesAndDoesNotClaimToRunLocalFallback() = runTest {
+        val model = Model()
+        val google = GoogleAiLookupSource { _, _ ->
+            delay(GoogleAiWaitPolicy.MANUAL_TIMEOUT_MS + 1)
+            error("must time out")
+        }
+        val events = mutableListOf<FoodAssessmentEvent>()
+        val error = runCatching {
+            FoodAssessment(model, google) { error("must not run fallback on explicit retry") }
+                .analyze("白飯", "1份", "維持", true, googleRetry = true).collect { events += it }
+        }.exceptionOrNull()!!
+        assertTrue(error.message!!.contains("原有數值已保留"))
+        assertFalse(error.message!!.contains("改查台灣資料"))
+        assertTrue(events.none { it is FoodAssessmentEvent.Token || it is FoodAssessmentEvent.Lookup })
+        assertEquals("", model.reference)
     }
 
     private class Model(limit: Int = 4096) : GemmaLocalHelper {

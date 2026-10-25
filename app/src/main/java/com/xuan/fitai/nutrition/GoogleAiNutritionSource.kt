@@ -12,6 +12,8 @@ import java.text.Normalizer
 fun interface GoogleAiLookupSource {
     suspend fun lookup(name: String, portion: String): GoogleAiLookup
     suspend fun retry(name: String, portion: String): GoogleAiLookup = lookup(name, portion)
+    suspend fun lookupWithProgress(name: String, portion: String, retry: Boolean, onStatus: suspend (String) -> Unit): GoogleAiLookup =
+        if (retry) this.retry(name, portion) else lookup(name, portion)
 }
 data class GoogleAiLookup(val assessment: GoogleAiAssessment? = null, val message: String, val attempts: Int = 0, val canRetry: Boolean = false)
 data class GoogleAiAssessment(val analysis: GemmaFoodAnalysis, val reference: NutritionReference) {
@@ -23,7 +25,7 @@ data class GoogleAiAssessment(val analysis: GemmaFoodAnalysis, val reference: Nu
     }.toString()
 }
 
-/** At most three automatic searches; an explicit retry submits at most one. Captcha/rate limits stop immediately, never bypassed. */
+/** At most three distinct providers per round. Captcha/rate limits stop immediately. */
 class GoogleAiNutritionSource(
     private val pages: GoogleAiPageSource,
     private val clock: () -> Long = System::currentTimeMillis,
@@ -36,20 +38,24 @@ class GoogleAiNutritionSource(
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, GoogleAiAssessment>?) = size > 32
     }
 
-    override suspend fun lookup(name: String, portion: String): GoogleAiLookup = lookupLimited(name, portion, 3)
-    override suspend fun retry(name: String, portion: String): GoogleAiLookup = lookupLimited(name, portion, 1)
+    override suspend fun lookup(name: String, portion: String): GoogleAiLookup = lookupLimited(name, portion, false)
+    override suspend fun retry(name: String, portion: String): GoogleAiLookup = lookupLimited(name, portion, true)
+    override suspend fun lookupWithProgress(name: String, portion: String, retry: Boolean, onStatus: suspend (String) -> Unit): GoogleAiLookup =
+        lookupLimited(name, portion, retry, onStatus)
 
-    private suspend fun lookupLimited(name: String, portion: String, limit: Int): GoogleAiLookup {
+    private suspend fun lookupLimited(name: String, portion: String, manualRetry: Boolean, onStatus: suspend (String) -> Unit = {}): GoogleAiLookup {
         if (!mutex.tryLock()) {
             monitor.suppressed()
             report(monitor.snapshot())
             return GoogleAiLookup(message = "已有網路 AI 查詢進行中，已略過重複請求。")
         }
-        try { return lookupLocked(name, portion, limit) } finally { mutex.unlock() }
+        try { return lookupLocked(name, portion, manualRetry, onStatus) } finally { mutex.unlock() }
     }
 
-    private suspend fun lookupLocked(name: String, portion: String, limit: Int): GoogleAiLookup {
-        val fallback = if (limit == 1) "本次未更新估算，原有數值已保留。" else "改用台灣資料。"
+    private suspend fun lookupLocked(name: String, portion: String, manualRetry: Boolean, onStatus: suspend (String) -> Unit): GoogleAiLookup {
+        // A pinned source (used by diagnostics) cannot switch providers on a manual retry.
+        val limit = if (manualRetry && rotation == null) 1 else 3
+        val fallback = if (manualRetry) "本次未更新估算，原有數值已保留。" else "改用台灣資料。"
         val basis = GoogleAiNutritionParser.basisForPortion(portion)
             ?: return GoogleAiLookup(message = "份量無法明確對應，$fallback")
         if (name.trim().length !in 2..80) return GoogleAiLookup(message = "餐點名稱無法查詢，$fallback")
@@ -68,7 +74,9 @@ class GoogleAiNutritionSource(
             val provider = if (rotation == null) WebAiProvider.GOOGLE else rotation.next(tried)
                 ?: return GoogleAiLookup(message = "目前沒有其他可輪替的 AI。$fallback", attempts = attempt - 1)
             tried += provider
-            val url = providerUrl(provider, name, basis, if (limit == 1) 2 else attempt)
+            val url = providerUrl(provider, name, basis, if (manualRetry) 2 else attempt)
+            onStatus((if (attempt > 1) "前一個 AI 未取得可用資料，切換至 " else "正在查詢 ") +
+                "${provider.label}（第 $attempt/$limit 家，回答最多等 30 秒）…")
             monitor.started(provider.label)
             val startedAt = System.nanoTime()
             fun record(outcome: GoogleAiTrafficMonitor.Outcome, status: Int? = null) {
@@ -250,7 +258,6 @@ object GoogleAiNutritionParser {
     }
 
     fun parse(name: String, basis: String, page: GoogleAiPage, sourceUrl: String, provider: WebAiProvider = WebAiProvider.GOOGLE): NutritionFood? {
-        if (provider == WebAiProvider.DUCK && page.modelLabel.isNullOrBlank()) return null
         if (page.blocked || page.failure != null || page.citations.none { isGoogleCitationUrl(it.url) }) return null
         val recipe = recipeDetails(page)
         if (recipe.estimated && recipe.assumption == null) return null
@@ -318,8 +325,8 @@ object GoogleAiNutritionParser {
         if (values[0] > 20 && energy !in values[0] * 0.5f..values[0] * 1.8f) return null
         if (values[0] <= 20 && energy > 50) return null
         val categoryLabel = when {
-            provider in setOf(WebAiProvider.DUCK, WebAiProvider.GEMINI, WebAiProvider.CHATGPT) && !page.modelLabel.isNullOrBlank() ->
-                "${provider.label} / ${page.modelLabel}"
+            provider in setOf(WebAiProvider.DUCK, WebAiProvider.GEMINI, WebAiProvider.CHATGPT) ->
+                "${provider.label} / ${page.modelLabel?.takeIf { it.isNotBlank() } ?: "模型未知"}"
             else -> provider.label
         }.take(40)
         val cleanSourceUrl = when (provider) {

@@ -34,11 +34,18 @@ private fun foodShortSource(food: NutritionFood): String = when {
 
 @Composable
 fun NutritionReferenceToggle(enabled: Boolean, onChange: (Boolean) -> Unit, interactive: Boolean = true) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
         Column(Modifier.weight(1f)) {
-            Text("營養資料輔助", style = MaterialTheme.typography.titleSmall)
-            Text("自動輪替 5 大網路 AI 與台灣食藥署資料（僅查名稱與份量）",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("🌐 連網精準估算", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(
+                "結合台灣食藥署與公開營養資料輔助計算",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         Switch(enabled, onChange, enabled = interactive)
     }
@@ -89,15 +96,6 @@ fun NutritionReferenceBadge(raw: String?) {
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (webFoods.isNotEmpty() || tfdaFoods.isNotEmpty() || googleFoods.isNotEmpty()) {
-                            Text(
-                                text = (if (reference.fromCache) "快取資料 · " else "即時取得 · ") +
-                                    Instant.ofEpochMilli(reference.fetchedAt).atZone(ZoneId.systemDefault())
-                                        .format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm")),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                         if (reference.recipeEstimate) {
                             Text(
                                 text = "配方估算（依一般配方，非完整營養標示）",
@@ -113,15 +111,15 @@ fun NutritionReferenceBadge(raw: String?) {
                             }
                         } else if (googleFoods.isNotEmpty()) {
                             Text(
-                                text = "${googleFoods.first().category} 公開網頁估算（非官方營養標示）",
+                                text = "${googleFoods.first().category} 公開營養資料估算",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
                         val counts = buildList {
-                            if (webFoods.isNotEmpty()) add("網路營養庫 ${webFoods.size} 筆")
-                            if (twFoods.isNotEmpty()) add("內建配方 ${twFoods.size} 筆")
-                            if (tfdaFoods.isNotEmpty()) add("食藥署 TFDA ${tfdaFoods.size} 筆")
+                            if (webFoods.isNotEmpty()) add("公開營養資料 ${webFoods.size} 筆")
+                            if (twFoods.isNotEmpty()) add("常見配方 ${twFoods.size} 筆")
+                            if (tfdaFoods.isNotEmpty()) add("衛福部食藥署 ${tfdaFoods.size} 筆")
                         }
                         if (counts.isNotEmpty()) {
                             Text(
@@ -159,8 +157,8 @@ fun NutritionReferenceBadge(raw: String?) {
                             }
                             val basisLabel = if (food.isPer100g) "每 100g" else "每${food.servingLabel}"
                             Text(
-                                text = "$basisLabel：${food.calories} kcal" +
-                                    if (food.hasMacros) "  ｜  P ${food.protein}g · C ${food.carbs}g · F ${food.fat}g" else "（三大營養素另由 AI 估算）",
+                                text = "$basisLabel：${food.calories.toInt()} kcal" +
+                                    if (food.hasMacros) "  ·  蛋白質 ${food.protein}g · 碳水 ${food.carbs}g · 脂肪 ${food.fat}g" else "（三大營養素由 AI 估算）",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Medium
                             )
@@ -247,12 +245,11 @@ fun NutritionReferenceBadge(raw: String?) {
                 }
 
                 Text(
-                    text = "註：估算數值若為區間取中值顯示，實際熱量可能因店家配方與份量而異。",
+                    text = "註：實際熱量可能因店家烹調方式與份量而略有差異。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                GoogleAiTrafficStatus()
                 if (linkError) {
                     Text("無法開啟瀏覽器，請稍後再試。", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }

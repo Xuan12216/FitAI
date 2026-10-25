@@ -65,19 +65,22 @@ object WebNutritionScraper {
     }
 
     internal fun buildFatSecretQuery(rawQuery: String): String {
-        val q = Normalizer.normalize(rawQuery.trim(), Normalizer.Form.NFKC).replace("捲", "卷")
-        if (q.endsWith("牛肉麵") && q.length > 3) return "牛肉麵"
-        if (q.endsWith("蛋餅") && q != "玉米蛋餅" && q.length > 2) return "蛋餅"
-        for (brand in listOf("麥當勞", "肯德基", "星巴克", "摩斯漢堡", "摩斯", "漢堡王")) {
-            if (q.startsWith(brand) && q.length > brand.length + 1) return q.removePrefix(brand).trim()
-        }
-        return q
+        return Normalizer.normalize(rawQuery.trim(), Normalizer.Form.NFKC).replace("捲", "卷")
     }
+
+    // Compare common dish spellings across the site's simplified text and Taiwan queries.
+    // Keep ingredients and brands intact: 火腿蛋餅 must never become a generic 蛋餅 match.
+    private fun fatSecretNameKey(name: String): String = normalizeQuery(name).lowercase(Locale.ROOT)
+        .map { c -> when (c) {
+            '饼' -> '餅'; '鸡' -> '雞'; '猪' -> '豬'; '鱼' -> '魚'; '虾' -> '蝦'
+            '饭' -> '飯'; '汤' -> '湯'; '酱' -> '醬'; '烧' -> '燒'; '卤' -> '滷'
+            '丝' -> '絲'; '麦' -> '麥'; '当' -> '當'; '劳' -> '勞'; '汉' -> '漢'
+            '红' -> '紅'; '面' -> '麵'; else -> c
+        } }.joinToString("")
 
     internal fun parseFatSecretHtml(rawQuery: String, html: String): List<NutritionFood> {
         if (html.isBlank()) return emptyList()
-        val key = normalizeQuery(rawQuery).lowercase(Locale.ROOT)
-        val sq = normalizeQuery(buildFatSecretQuery(rawQuery)).lowercase(Locale.ROOT)
+        val key = fatSecretNameKey(rawQuery)
         return fatSecretCells.findAll(html).mapNotNull { cellMatch ->
             val cell = cellMatch.groupValues[1]
             val rawTitle = fatSecretTitle.find(cell)?.groupValues?.get(1)?.let(::stripHtml).orEmpty()
@@ -93,16 +96,31 @@ object WebNutritionScraper {
             val rawProtein = macroMatch.groupValues[5].toFloatOrNull() ?: return@mapNotNull null
 
             val displayName = if (brand.isNotEmpty() && !rawTitle.contains(brand)) "$brand $rawTitle" else rawTitle
-            val normTitle = normalizeQuery(displayName).lowercase(Locale.ROOT)
-            val overlap = sq.count { normTitle.contains(it) }
-            if (overlap == 0 && !normTitle.contains(key)) return@mapNotNull null
+            if (fatSecretNameKey(displayName) != key && fatSecretNameKey(rawTitle) != key) return@mapNotNull null
 
-            val grams = gramsInServing.find(servingText)?.groupValues?.get(1)?.toFloatOrNull()
-            val scale = if (grams != null && grams >= 10f && grams <= 2000f) 100f / grams else 1f
-            val cal100 = (rawCal * scale * 10f).roundToInt() / 10f
-            val p100 = (rawProtein * scale * 10f).roundToInt() / 10f
-            val c100 = (rawCarbs * scale * 10f).roundToInt() / 10f
-            val f100 = (rawFat * scale * 10f).roundToInt() / 10f
+            if (Regex("[~～–—至到]").containsMatchIn(servingText)) return@mapNotNull null
+            val masses = gramsInServing.findAll(servingText).toList()
+            val grams = masses.singleOrNull()?.groupValues?.get(1)?.toFloatOrNull()
+            val servingLabel: String
+            val scale: Float
+            if (masses.isNotEmpty()) {
+                if (grams == null || !grams.isFinite() || grams !in 0.1f..10000f) return@mapNotNull null
+                servingLabel = "100g"
+                scale = 100f / grams
+            } else {
+                val serving = Regex("^(\\d+(?:\\.\\d+)?)\\s*([\\p{IsHan}]+)$")
+                    .matchEntire(Normalizer.normalize(servingText, Normalizer.Form.NFKC)) ?: return@mapNotNull null
+                val count = serving.groupValues[1].toFloatOrNull()?.takeIf { it.isFinite() && it > 0f && it <= 100f }
+                    ?: return@mapNotNull null
+                val unit = normalizeServingUnit(serving.groupValues[2])
+                if (unit !in SUPPORTED_SERVING_UNITS) return@mapNotNull null
+                servingLabel = "1$unit"
+                scale = 1f / count
+            }
+            val scaledCalories = (rawCal * scale * 10f).roundToInt() / 10f
+            val scaledProtein = (rawProtein * scale * 10f).roundToInt() / 10f
+            val scaledCarbs = (rawCarbs * scale * 10f).roundToInt() / 10f
+            val scaledFat = (rawFat * scale * 10f).roundToInt() / 10f
 
             val desc = if (grams != null && grams != 100f) {
                 "【來源：網路營養資料庫 FatSecret】每$servingText 約 ${rawCal.roundToInt()}kcal (P ${rawProtein}g/C ${rawCarbs}g/F ${rawFat}g)；已換算每100g"
@@ -112,14 +130,15 @@ object WebNutritionScraper {
             NutritionFood(
                 id = "WEB-FS-${displayName.hashCode().toUInt().toString(16)}",
                 name = displayName.take(100),
-                aliases = rawQuery.take(100),
+                aliases = "",
                 description = desc.take(400),
-                calories = cal100,
-                protein = p100,
-                carbs = c100,
-                fat = f100,
+                calories = scaledCalories,
+                protein = scaledProtein,
+                carbs = scaledCarbs,
+                fat = scaledFat,
                 category = "網路營養資料 (FatSecret)",
-                sourceUrl = "https://www.fatsecret.cn"
+                sourceUrl = "https://www.fatsecret.cn",
+                servingLabel = servingLabel
             ).takeIf { it.isValid() }
         }.distinctBy { it.name }.take(3).toList()
     }

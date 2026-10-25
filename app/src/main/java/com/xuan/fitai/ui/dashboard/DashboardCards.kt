@@ -41,18 +41,20 @@ internal fun ModelStatusBanner(state: ModelLoadState, modelName: String?, onSetu
             .fillMaxWidth()
             .clickable(onClick = onSetup)
             .semantics { liveRegion = LiveRegionMode.Polite },
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(16.dp),
         color = when (state) {
-            ModelLoadState.Loaded -> MaterialTheme.colorScheme.surfaceContainerHighest
+            ModelLoadState.Loaded -> MaterialTheme.colorScheme.surfaceContainerLow
             ModelLoadState.Loading -> MaterialTheme.colorScheme.surfaceContainerHigh
             else -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
-        },
-        tonalElevation = 1.dp
+        }
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(
+                horizontal = 16.dp,
+                vertical = if (state == ModelLoadState.Loaded) 10.dp else 14.dp
+            ),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (state == ModelLoadState.Loading) {
                 CircularProgressIndicator(
@@ -61,34 +63,50 @@ internal fun ModelStatusBanner(state: ModelLoadState, modelName: String?, onSetu
                     color = Color(0xFFF59E0B)
                 )
             } else {
-                Box(Modifier.size(12.dp).background(
-                    if (state == ModelLoadState.Loaded) Color(0xFF10B981) else MaterialTheme.colorScheme.error,
-                    CircleShape
-                ))
+                Box(
+                    Modifier
+                        .size(10.dp)
+                        .background(
+                            if (state == ModelLoadState.Loaded) Color(0xFF10B981) else MaterialTheme.colorScheme.error,
+                            CircleShape
+                        )
+                )
             }
             Column(Modifier.weight(1f)) {
                 Text(
                     text = when (state) {
-                        ModelLoadState.Loading -> "Gemma 4 地端推論引擎背景暖機中…"
-                        ModelLoadState.Loaded -> "Gemma 4 離線就緒 (${modelName ?: "已載入"})"
-                        is ModelLoadState.Failed -> "本地模型載入失敗（點擊前往設定）"
-                        ModelLoadState.NotFound -> "尚未載入本地模型（點擊前往設定）"
+                        ModelLoadState.Loading -> "AI 營養助理正在暖機準備中…"
+                        ModelLoadState.Loaded -> "AI 營養助理已就緒"
+                        is ModelLoadState.Failed -> "AI 助理尚未就緒（點此檢查設定）"
+                        ModelLoadState.NotFound -> "尚未啟用 AI 營養助理（點此前往設定）"
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold
                 )
+                if (state != ModelLoadState.Loaded) {
+                    Text(
+                        text = when (state) {
+                            ModelLoadState.Loading -> "背景準備完成後即可使用 AI 分析與建議"
+                            else -> "前往設定下載或啟用 AI 模型"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            if (state == ModelLoadState.Loaded && !modelName.isNullOrBlank()) {
                 Text(
-                    text = when (state) {
-                        ModelLoadState.Loading -> "模型與快取準備中 · 其它功能可正常使用"
-                        ModelLoadState.Loaded -> "可開始使用 AI 助理 · 資料在裝置上處理"
-                        else -> "前往模型設定檢查或載入模型"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
+                    text = modelName,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Icon(Icons.Default.ChevronRight, contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -218,8 +236,13 @@ internal fun WeeklyOverview(days: List<DailySummary>, targetCalories: Float = 0f
                     if (selected.mealCount == 0) "尚無紀錄" else "${selected.calories.toInt()} kcal  ·  ${selected.mealCount} 餐",
                 style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium
             )
-            if (targetCalories > 0) Text("虛線：目前每日目標 ${targetCalories.toInt()} kcal；點日期查看當日明細。", style = MaterialTheme.typography.labelSmall)
-            Text("數值僅包含已記錄的餐點。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (targetCalories > 0) {
+                Text(
+                    "虛線為每日目標 ${targetCalories.toInt()} kcal",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

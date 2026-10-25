@@ -22,14 +22,15 @@ class FoodAssessment(private val gemma: GemmaLocalHelper,
     fun analyze(name: String, portion: String, goal: String, useReference: Boolean, googleRetry: Boolean = false): Flow<FoodAssessmentEvent> = flow {
         var googleMessage = ""
         if (useReference) {
-            emit(FoodAssessmentEvent.Status(if (googleRetry) "網路 AI 再查一次…" else "網路 AI 查詢中（最多 3 次）…"))
+            val failureFallback = if (googleRetry) "本次未更新估算，原有數值已保留。" else "改查台灣資料。"
+            emit(FoodAssessmentEvent.Status("網路 AI 查詢中，失敗自動切換（最多 3 家，每家回答最多等 30 秒）…"))
             val google = try {
                 withTimeoutOrNull(if (googleRetry) GoogleAiWaitPolicy.MANUAL_TIMEOUT_MS else GoogleAiWaitPolicy.TOTAL_TIMEOUT_MS) {
-                    if (googleRetry) googleAi.retry(name, portion) else googleAi.lookup(name, portion)
+                    googleAi.lookupWithProgress(name, portion, googleRetry) { emit(FoodAssessmentEvent.Status(it)) }
                 }
-                    ?: GoogleAiLookup(message = "網路 AI 查詢逾時，改查台灣資料。", canRetry = true)
+                    ?: GoogleAiLookup(message = "網路 AI 查詢逾時，$failureFallback", canRetry = true)
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { GoogleAiLookup(message = "網路 AI 暫時無法使用，改查台灣資料。", canRetry = true) }
+            catch (_: Exception) { GoogleAiLookup(message = "網路 AI 暫時無法使用，$failureFallback", canRetry = true) }
             emit(FoodAssessmentEvent.GoogleFinished(google.canRetry))
             googleMessage = google.message
             val result = google.assessment

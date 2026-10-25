@@ -19,11 +19,20 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /**
  * Parses and renders an AI response that may contain thinking/reasoning sections.
@@ -52,11 +61,16 @@ fun ThinkingContent(
 ) {
     val regex = Regex("<\\|?channel\\|?>([a-zA-Z0-9_]*)")
     val matches = regex.findAll(rawText).toList()
+    val codeBackground = MaterialTheme.colorScheme.surfaceContainerHighest
+    val accentColor = MaterialTheme.colorScheme.primary
 
-    // No channel tags — render as plain text
+    // No channel tags — render as formatted Markdown text
     if (matches.isEmpty()) {
+        val annotated = remember(rawText, codeBackground, accentColor) {
+            parseMarkdownToAnnotatedString(rawText, codeBackground, accentColor)
+        }
         Text(
-            text = rawText,
+            text = annotated,
             style = contentTextStyle,
             modifier = modifier,
             maxLines = maxLines,
@@ -142,7 +156,7 @@ fun ThinkingContent(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Show thinking (顯示思考過程)",
+                            text = "💭 查看 AI 思考過程",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -184,8 +198,11 @@ fun ThinkingContent(
                                     )
                             )
                             Spacer(modifier = Modifier.width(10.dp))
+                            val annotatedThinking = remember(thinkingText, codeBackground, accentColor) {
+                                parseMarkdownToAnnotatedString(thinkingText.orEmpty(), codeBackground, accentColor)
+                            }
                             Text(
-                                text = thinkingText,
+                                text = annotatedThinking,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
                                 modifier = Modifier.weight(1f)
@@ -198,8 +215,247 @@ fun ThinkingContent(
 
         // Main answer text
         if (contentText.isNotBlank()) {
-            Text(text = contentText, style = contentTextStyle, maxLines = maxLines,
-                overflow = TextOverflow.Ellipsis, onTextLayout = onTextLayout)
+            val annotatedContent = remember(contentText, codeBackground, accentColor) {
+                parseMarkdownToAnnotatedString(contentText, codeBackground, accentColor)
+            }
+            Text(
+                text = annotatedContent,
+                style = contentTextStyle,
+                maxLines = maxLines,
+                overflow = TextOverflow.Ellipsis,
+                onTextLayout = onTextLayout
+            )
+        }
+    }
+}
+
+/**
+ * Extracts only the visible answer portion from raw model text (stripping `<|channel>thought...` sections).
+ */
+fun extractAnswerWithoutThinking(rawText: String): String {
+    val regex = Regex("<\\|?channel\\|?>([a-zA-Z0-9_]*)")
+    val matches = regex.findAll(rawText).toList()
+    if (matches.isEmpty()) return rawText.trim()
+    var contentText = ""
+    for (i in matches.indices) {
+        val match = matches[i]
+        val channelName = match.groupValues[1]
+        val startIdx = match.range.last + 1
+        val endIdx = if (i + 1 < matches.size) matches[i + 1].range.first else rawText.length
+        val sectionText = rawText.substring(startIdx, endIdx).trim()
+        if (channelName != "thought" && channelName != "thinking") {
+            contentText = sectionText
+        }
+    }
+    return contentText.ifBlank { rawText }.trim()
+}
+
+internal fun parseMarkdownToAnnotatedString(
+    markdown: String,
+    codeBackground: Color = Color.Transparent,
+    accentColor: Color = Color.Unspecified
+): AnnotatedString = buildAnnotatedString {
+    val normalized = markdown.replace("\r\n", "\n")
+    val lines = normalized.split("\n")
+    var inCodeBlock = false
+    val headingRegex = Regex("^\\s*(#{1,6})\\s+(.*)$")
+    val hrRegex = Regex("^\\s*([-*_]){3,}\\s*$")
+    val bulletRegex = Regex("^(\\s*)[-*+•]\\s+(.*)$")
+    val numberedRegex = Regex("^(\\s*)(\\d+\\.)\\s+(.*)$")
+    val quoteRegex = Regex("^\\s*>\\s?(.*)$")
+    val tableDividerRegex = Regex("^\\s*\\|?[\\s:|-]+\\|?\\s*$")
+
+    var emittedLines = 0
+    for (line in lines) {
+        val trimmed = line.trim()
+        if (trimmed.startsWith("```")) {
+            inCodeBlock = !inCodeBlock
+            continue
+        }
+        if (inCodeBlock) {
+            if (emittedLines > 0) append("\n")
+            withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = codeBackground)) {
+                append(line)
+            }
+            emittedLines++
+            continue
+        }
+        if (hrRegex.matches(trimmed)) {
+            continue
+        }
+        if (trimmed.startsWith("|") && tableDividerRegex.matches(trimmed) && trimmed.contains("-")) {
+            continue
+        }
+
+        if (emittedLines > 0) append("\n")
+        emittedLines++
+
+        val headingMatch = headingRegex.matchEntire(line)
+        if (headingMatch != null) {
+            val level = headingMatch.groupValues[1].length
+            val titleText = headingMatch.groupValues[2].trim()
+            val fontSize = when (level) {
+                1 -> 18.sp
+                2 -> 17.sp
+                3 -> 16.sp
+                else -> 15.sp
+            }
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = fontSize)) {
+                appendInlineMarkdown(titleText, codeBackground, accentColor)
+            }
+            continue
+        }
+
+        val bulletMatch = bulletRegex.matchEntire(line)
+        if (bulletMatch != null) {
+            val indent = bulletMatch.groupValues[1].length
+            val itemText = bulletMatch.groupValues[2]
+            val prefix = if (indent >= 2) "  ◦ " else "• "
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = accentColor)) {
+                append(prefix)
+            }
+            appendInlineMarkdown(itemText, codeBackground, accentColor)
+            continue
+        }
+
+        val numberedMatch = numberedRegex.matchEntire(line)
+        if (numberedMatch != null) {
+            val indent = if (numberedMatch.groupValues[1].length >= 2) "  " else ""
+            val numPrefix = numberedMatch.groupValues[2]
+            val itemText = numberedMatch.groupValues[3]
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = accentColor)) {
+                append("$indent$numPrefix ")
+            }
+            appendInlineMarkdown(itemText, codeBackground, accentColor)
+            continue
+        }
+
+        val quoteMatch = quoteRegex.matchEntire(line)
+        if (quoteMatch != null) {
+            val quoteText = quoteMatch.groupValues[1]
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = accentColor)) {
+                append("▎ ")
+            }
+            withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
+                appendInlineMarkdown(quoteText, codeBackground, accentColor)
+            }
+            continue
+        }
+
+        // Table row formatting: | A | B | C | -> A · B · C
+        if (trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.count { it == '|' } >= 3) {
+            val cells = trimmed.removePrefix("|").removeSuffix("|").split("|").map { it.trim() }
+            cells.forEachIndexed { idx, cell ->
+                if (idx > 0) append("  ｜  ")
+                appendInlineMarkdown(cell, codeBackground, accentColor)
+            }
+            continue
+        }
+
+        appendInlineMarkdown(line, codeBackground, accentColor)
+    }
+}
+
+private fun AnnotatedString.Builder.appendInlineMarkdown(
+    text: String,
+    codeBackground: Color,
+    accentColor: Color
+) {
+    var i = 0
+    val n = text.length
+    while (i < n) {
+        when {
+            // Bold + Italic: ***text***
+            text.startsWith("***", i) -> {
+                val end = text.indexOf("***", i + 3)
+                if (end != -1) {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)) {
+                        appendInlineMarkdown(text.substring(i + 3, end), codeBackground, accentColor)
+                    }
+                    i = end + 3
+                } else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)) {
+                        append(text.substring(i + 3))
+                    }
+                    break
+                }
+            }
+            // Bold: **text** or __text__
+            text.startsWith("**", i) || text.startsWith("__", i) -> {
+                val marker = text.substring(i, i + 2)
+                val end = text.indexOf(marker, i + 2)
+                if (end != -1) {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                        appendInlineMarkdown(text.substring(i + 2, end), codeBackground, accentColor)
+                    }
+                    i = end + 2
+                } else {
+                    // Unclosed bold during streaming: bold the remainder cleanly without showing raw **
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                        append(text.substring(i + 2))
+                    }
+                    break
+                }
+            }
+            // Strikethrough: ~~text~~
+            text.startsWith("~~", i) -> {
+                val end = text.indexOf("~~", i + 2)
+                if (end != -1) {
+                    withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) {
+                        appendInlineMarkdown(text.substring(i + 2, end), codeBackground, accentColor)
+                    }
+                    i = end + 2
+                } else {
+                    append("~~")
+                    i += 2
+                }
+            }
+            // Inline code: `code`
+            text[i] == '`' -> {
+                val end = text.indexOf('`', i + 1)
+                if (end != -1) {
+                    withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = codeBackground)) {
+                        append(text.substring(i + 1, end))
+                    }
+                    i = end + 1
+                } else {
+                    append('`')
+                    i++
+                }
+            }
+            // Link: [title](url)
+            text[i] == '[' -> {
+                val closeBracket = text.indexOf(']', i + 1)
+                val openParen = if (closeBracket != -1 && closeBracket + 1 < n && text[closeBracket + 1] == '(') closeBracket + 1 else -1
+                val closeParen = if (openParen != -1) text.indexOf(')', openParen + 1) else -1
+                if (closeParen != -1) {
+                    val label = text.substring(i + 1, closeBracket)
+                    withStyle(SpanStyle(fontWeight = FontWeight.Medium, color = accentColor, textDecoration = TextDecoration.Underline)) {
+                        appendInlineMarkdown(label, codeBackground, accentColor)
+                    }
+                    i = closeParen + 1
+                } else {
+                    append('[')
+                    i++
+                }
+            }
+            // Italic: *text* (only when not followed by space)
+            text[i] == '*' && i + 1 < n && text[i + 1] != ' ' && text[i + 1] != '*' -> {
+                val end = text.indexOf('*', i + 1)
+                if (end != -1 && text[end - 1] != ' ') {
+                    withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
+                        appendInlineMarkdown(text.substring(i + 1, end), codeBackground, accentColor)
+                    }
+                    i = end + 1
+                } else {
+                    append('*')
+                    i++
+                }
+            }
+            else -> {
+                append(text[i])
+                i++
+            }
         }
     }
 }

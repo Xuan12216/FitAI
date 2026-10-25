@@ -138,9 +138,10 @@ class GoogleAiNutritionTest {
         assertEquals(3, selected.toSet().size)
         assertTrue(WebAiProvider.entries.containsAll(selected))
         val last = selected.last()
-        assertEquals(1, source.retry("火腿蛋餅", "1份").attempts)
-        assertNotEquals(last, selected.last())
-        assertEquals(4, selected.size)
+        assertEquals(3, source.retry("火腿蛋餅", "1份").attempts)
+        assertNotEquals(last, selected[3])
+        assertEquals(3, selected.drop(3).toSet().size)
+        assertEquals(6, selected.size)
     }
 
     @Test fun nonBlockingNetworkFailureCanFallBackToAnotherProviderButCaptchaStopsImmediately() = runTest {
@@ -194,10 +195,12 @@ class GoogleAiNutritionTest {
         assertEquals(1, calls)
     }
     @Test fun duckPreparationDeadlineDoesNotShortenAnswerDeadline() {
-        val preparing = GoogleAiPage(preparing = true, preparationStage = "setSpeed")
-        assertFalse(GoogleAiWaitPolicy.preparationTimedOut(preparing, 7_999))
-        assertTrue(GoogleAiWaitPolicy.preparationTimedOut(preparing, 8_000))
-        assertFalse(GoogleAiWaitPolicy.preparationTimedOut(preparing.copy(preparing = false, preparationStage = "sent"), 24_999))
+        val deadline = GoogleAiDeadlineTracker(preparesQuery = true)
+        assertFalse(deadline.preparationTimedOut(7_999))
+        assertTrue(deadline.preparationTimedOut(8_000))
+        deadline.observe(GoogleAiPage(preparationStage = "sent"), 7_900)
+        assertFalse(deadline.preparationTimedOut(24_999))
+        assertFalse(deadline.answerTimedOut(24_999))
     }
 
     @Test fun failedManualLookupDoesNotClaimItRanTheLocalFallback() = runTest {
@@ -206,6 +209,30 @@ class GoogleAiNutritionTest {
         assertEquals(1, result.attempts)
         assertTrue(result.message.contains("原有數值已保留"))
         assertFalse(result.message.contains("改用台灣資料"))
+    }
+
+    @Test fun timeoutSwitchesProviderAndReportsProgressBeforeAcceptingNextAnswer() = runTest {
+        val selected = mutableListOf<WebAiProvider>()
+        val statuses = mutableListOf<String>()
+        val source = GoogleAiNutritionSource({ url ->
+            selected += WebAiProvider.fromUrl(url)!!
+            if (selected.size == 1) GoogleAiPage(failure = "回答等待逾時（30 秒）") else page()
+        }, rotation = WebAiRotation())
+        val result = source.lookupWithProgress("火腿蛋餅", "1份", retry = false) { statuses += it }
+        assertNotNull(result.assessment)
+        assertEquals(2, result.attempts)
+        assertNotEquals(selected[0], selected[1])
+        assertTrue(statuses[1].contains("切換至 ${selected[1].label}"))
+        assertTrue(statuses.all { it.contains("30 秒") })
+    }
+
+    @Test fun unknownModelIsLabelledHonestlyWithoutRejectingOtherwiseValidFacts() {
+        for (provider in listOf(WebAiProvider.DUCK, WebAiProvider.GEMINI, WebAiProvider.CHATGPT)) {
+            val food = GoogleAiNutritionParser.parse("火腿蛋餅", "1份", page(),
+                GoogleAiNutritionSource.providerUrl(provider, "火腿蛋餅", "1份", 1), provider)!!
+            assertEquals("${provider.label} / 模型未知", food.category)
+            assertTrue(food.isValid())
+        }
     }
 
 }

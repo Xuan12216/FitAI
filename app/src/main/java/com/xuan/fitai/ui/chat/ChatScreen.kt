@@ -265,7 +265,7 @@ fun ChatScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("本地 Gemma AI 助理", fontWeight = FontWeight.Bold) },
+                title = { Text("✨ AI 營養教練", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
@@ -292,7 +292,7 @@ fun ChatScreen(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = if (gemmaLoadState == ModelLoadState.Loading) "AI 助理正在背景暖機" else "Gemma 模型尚未載入",
+                    text = if (gemmaLoadState == ModelLoadState.Loading) "AI 營養教練正在準備中" else "尚未啟用 AI 營養教練",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -301,7 +301,7 @@ fun ChatScreen(
                     text = if (gemmaLoadState == ModelLoadState.Loading) {
                         "準備完成後會自動開啟對話，你可以先返回使用其他功能。"
                     } else {
-                        "請先前往模型設定頁面下載或匯入 Gemma 模型。"
+                        "請先前往設定頁面下載或啟用 AI 模型。"
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -312,7 +312,7 @@ fun ChatScreen(
                     AppLoadingIndicator()
                 } else {
                     androidx.compose.material3.Button(onClick = onNavigateToSetup) {
-                        Text("前往模型設定")
+                        Text("前往設定啟用")
                     }
                 }
             }
@@ -367,18 +367,18 @@ fun ChatScreen(
                         ) {
                             Box(
                                 modifier = Modifier
+                                    .widthIn(max = 420.dp)
                                     .clip(
                                         MaterialTheme.shapes.medium.copy(
-                                            bottomEnd = if (isUser) CornerSize(0.dp) else CornerSize(12.dp),
-                                            bottomStart = if (isUser) CornerSize(12.dp) else CornerSize(0.dp)
+                                            bottomEnd = if (isUser) CornerSize(0.dp) else CornerSize(14.dp),
+                                            bottomStart = if (isUser) CornerSize(14.dp) else CornerSize(0.dp)
                                         )
                                     )
                                     .background(
                                         if (isUser) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.surfaceVariant
+                                        else MaterialTheme.colorScheme.surfaceContainerHigh
                                     )
-                                    .padding(12.dp)
-                                    .widthIn(max = 280.dp)
+                                    .padding(14.dp)
                             ) {
                                 val messageImages by produceState<List<Bitmap>>(
                                     initialValue = emptyList(),
@@ -388,9 +388,6 @@ fun ChatScreen(
                                     value = withContext(Dispatchers.Default) {
                                         ChatImageCodec.decode(msg.imageBytes)
                                     }
-                                }
-                                if (!isUser && !isGenerating) {
-                                    androidx.compose.material3.TextButton(onClick = { mealDraft = msg.content }) { Text("建立餐點草稿") }
                                 }
                                 if (isUser) {
                                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -403,39 +400,56 @@ fun ChatScreen(
                                                 },
                                             )
                                         }
-                                    if (msg.audioBytes?.isNotEmpty() == true) {
-                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            if (msg.content.isNotBlank() && msg.content != "語音" && msg.content != "圖片") {
-                                                Text(
-                                                    text = msg.content,
-                                                    color = MaterialTheme.colorScheme.onPrimary,
-                                                    style = MaterialTheme.typography.bodyMedium
+                                        if (msg.audioBytes?.isNotEmpty() == true) {
+                                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                if (msg.content.isNotBlank() && msg.content != "語音" && msg.content != "圖片") {
+                                                    Text(
+                                                        text = msg.content,
+                                                        color = MaterialTheme.colorScheme.onPrimary,
+                                                        style = MaterialTheme.typography.bodyMedium
+                                                    )
+                                                }
+                                                AudioMessageButton(
+                                                    isPlaying = playingAudioId == msg.id,
+                                                    onClick = {
+                                                        audioPlayer.toggle(
+                                                            id = msg.id,
+                                                            audioBytes = msg.audioBytes,
+                                                            onPlayingChanged = { playingAudioId = it },
+                                                        )
+                                                    },
                                                 )
                                             }
-                                            AudioMessageButton(
-                                                isPlaying = playingAudioId == msg.id,
-                                                onClick = {
-                                                    audioPlayer.toggle(
-                                                        id = msg.id,
-                                                        audioBytes = msg.audioBytes,
-                                                        onPlayingChanged = { playingAudioId = it },
-                                                    )
-                                                },
+                                        } else if (msg.content != "圖片" || messageImages.isEmpty()) {
+                                            Text(
+                                                text = msg.content,
+                                                color = MaterialTheme.colorScheme.onPrimary,
+                                                style = MaterialTheme.typography.bodyMedium
                                             )
                                         }
-                                    } else if (msg.content != "圖片" || messageImages.isEmpty()) {
-                                        Text(
-                                            text = msg.content,
-                                            color = MaterialTheme.colorScheme.onPrimary,
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
-                                    }
                                     }
                                 } else {
-                                    ThinkingContent(
-                                        rawText = msg.content,
-                                        isGenerating = isGenerating && msg.id == 0
-                                    )
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        ThinkingContent(
+                                            rawText = msg.content,
+                                            isGenerating = isGenerating && msg.id == 0
+                                        )
+                                        if (!isGenerating) {
+                                            Surface(
+                                                onClick = { mealDraft = msg.content },
+                                                shape = RoundedCornerShape(10.dp),
+                                                color = MaterialTheme.colorScheme.secondaryContainer
+                                            ) {
+                                                Text(
+                                                    text = "🍽️ 記入今日餐點",
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -450,7 +464,7 @@ fun ChatScreen(
                                 Box(
                                     modifier = Modifier
                                         .clip(MaterialTheme.shapes.medium.copy(bottomStart = CornerSize(0.dp)))
-                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                                         .padding(12.dp)
                                 ) {
                                     Row(
@@ -459,7 +473,7 @@ fun ChatScreen(
                                     ) {
                                         AppLoadingIndicator(modifier = Modifier.size(16.dp))
                                         Text(
-                                            text = "Gemma 正在思考中...",
+                                            text = "正在為你分析...",
                                             style = MaterialTheme.typography.bodySmall
                                         )
                                     }

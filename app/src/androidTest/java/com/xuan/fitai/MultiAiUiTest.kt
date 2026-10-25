@@ -57,6 +57,22 @@ class MultiAiUiTest {
         compose.onNodeWithText("食材與份量假設：$assumption").assertExists()
     }
 
+    @Test fun localNutritionReferenceDoesNotHideGemmaAttribution() {
+        val app = ApplicationProvider.getApplicationContext<FitAIApplication>()
+        val food = NutritionFood("TFDA-TEST", "雞蛋", "", "食藥署資料", 140f, 12f, 1f, 10f)
+        val raw = NutritionReferenceJson.encode(NutritionReference(1000, false, listOf(food)))
+        val model = Model()
+        val assessment = FoodAssessment(model) { NutritionLookup(message = "") }
+        val vm = DashboardViewModel(app.userRepository, app.mealRepository, model, app.reminderRepository,
+            app.database.progressDao(), assessment)
+        compose.setContent { MaterialTheme {
+            ManualMealDialog(vm, initial = Meal(name = "雞蛋", calories = 140f, protein = 12f, carbs = 1f, fat = 10f,
+                isAiEstimated = true, nutritionReferenceJson = raw), onDismiss = {})
+        } }
+        compose.onNodeWithText("估算 AI：本地 Gemma").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("資料來源：衛福部食藥署 TFDA (1筆)").assertExists()
+    }
+
     @Test fun failedSingleRetryKeepsPreviousMealValuesAndGemmaAttribution() {
         val app = ApplicationProvider.getApplicationContext<FitAIApplication>()
         val model = Model()

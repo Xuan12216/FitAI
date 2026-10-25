@@ -90,17 +90,17 @@ fun SettingsScreen(viewModel: ModelSetupViewModel, onNavigateBack: () -> Unit, i
                 }
             } else {
                 SettingsCard {
-                    Text("模型參數", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("AI 對話記憶與回應", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("上下文容量", style = MaterialTheme.typography.bodyMedium)
+                        Text("對話記憶長度（上下文容量）", style = MaterialTheme.typography.bodyMedium)
                         Text("$contextTokens tokens", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     }
-                    Text("較小容量適合短對話；較大容量可容納更多內容。", style = MaterialTheme.typography.bodySmall,
+                    Text("一般日常記錄使用預設值即可；喜歡長篇對話可調高容量。", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedButton(onClick = { showConfig = true }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.Tune, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("調整模型參數")
+                        Text("進階微調參數")
                     }
                 }
                 val failure = (gemmaLoadState as? ModelLoadState.Failed)?.message

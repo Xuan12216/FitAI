@@ -150,7 +150,7 @@ fun WorkoutScreen(
                     AppLoadingIndicator(color = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        "✨ 本地 Gemma 4 正在為您排程運動計畫...",
+                        "✨ AI 教練正在為您規劃運動課表...",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -199,9 +199,21 @@ fun WorkoutScreen(
                         )
                     }
 
-
+                    item {
+                        TodayWorkoutCard(
+                            today = today,
+                            plans = todayPlans,
+                            onToggle = viewModel::toggleWorkoutPlan,
+                            onEdit = {
+                                selectedPlanId = it.id
+                                showAddEditDialog = true
+                            },
+                            onDelete = viewModel::deleteWorkoutPlan
+                        )
+                    }
 
                     item { WorkoutSessionTools(viewModel, plans) }
+
                     // Show the card while the combined plan + summary request is running.
                     if (!workoutSummary.isNullOrBlank() || isSummarizing) {
                         item {
@@ -210,6 +222,10 @@ fun WorkoutScreen(
                                 isSummarizing = isSummarizing
                             )
                         }
+                    }
+
+                    item {
+                        MuscleBalanceCard(topMuscleGroups = topMuscleGroups)
                     }
 
                     item {
@@ -236,23 +252,6 @@ fun WorkoutScreen(
                                 }
                             }
                         )
-                    }
-
-                    item {
-                        TodayWorkoutCard(
-                            today = today,
-                            plans = todayPlans,
-                            onToggle = viewModel::toggleWorkoutPlan,
-                            onEdit = {
-                                selectedPlanId = it.id
-                                showAddEditDialog = true
-                            },
-                            onDelete = viewModel::deleteWorkoutPlan
-                        )
-                    }
-
-                    item {
-                        MuscleBalanceCard(topMuscleGroups = topMuscleGroups)
                     }
 
                     sortedDays.forEach { day ->
@@ -524,49 +523,46 @@ private fun HealthConnectPreviewCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = Icons.Default.Settings,
+                    imageVector = Icons.Default.Favorite,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer
+                    tint = MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Health Connect 健身數據",
+                    text = "今日活動與步數（Health Connect）",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                    fontWeight = FontWeight.Bold
                 )
             }
 
             if (sdkStatus != HealthConnectClient.SDK_AVAILABLE) {
                 Text(
-                    text = "您的裝置尚未安裝或需要更新 Google Health Connect。請點擊下方按鈕前往 Google Play 商店下載安裝，方可接入您的今日健身數據！",
+                    text = "安裝 Google Health Connect 後，可自動同步今日步數、心率與活動消耗熱量。",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    fontWeight = FontWeight.Medium
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Button(
-                    onClick = onRequestPermissions,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("安裝 Google Health Connect")
-                }
-            } else if (!hasPermissions) {
-                Text(
-                    text = "串接 Health Connect 可以直接讀取您的今日步數、平均心率與消耗熱量！",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-                Button(
+                FilledTonalButton(
                     onClick = onRequestPermissions,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("授權串接健康數據")
+                    Text("前往安裝 Health Connect")
+                }
+            } else if (!hasPermissions) {
+                Text(
+                    text = "連結 Health Connect 即可自動顯示今日步數、平均心率與活動消耗熱量。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                FilledTonalButton(
+                    onClick = onRequestPermissions,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("連結健康數據")
                 }
             } else {
                 Row(

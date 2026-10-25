@@ -1,0 +1,32 @@
+INSTRUMENTATION_STATUS: class=com.xuan.fitai.MultiAiLookupTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=
+com.xuan.fitai.MultiAiLookupTest:
+INSTRUMENTATION_STATUS: test=optInLiveAutomaticLookupCanUseOtherProvidersAfterNormalFailure
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: stream=automatic GOOGLE: blocked=false failure=null sources=0
+
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: stream=automatic GEMINI: blocked=false failure=null sources=1
+
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: stream=automatic result=Gemini / Gemini 3.5 Flash-Lite attempts=2
+
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.xuan.fitai.MultiAiLookupTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=optInLiveAutomaticLookupCanUseOtherProvidersAfterNormalFailure
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_RESULT: stream=
+
+Time: 36.193
+
+OK (1 test)
+
+
+INSTRUMENTATION_CODE: -1

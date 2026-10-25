@@ -143,69 +143,63 @@ fun ReminderScreen(viewModel: ReminderViewModel, bottomContentPadding: Dp = 0.dp
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Spacer(Modifier.height(padding.calculateTopPadding()))
-            if (isBatteryOptimized) {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Notifications, null)
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("忽略電池最佳化", fontWeight = FontWeight.Bold)
-                            Text("建議開啟「忽略電池最佳化」以確保提醒能準時送達。", style = MaterialTheme.typography.bodySmall)
+            if (!notificationPermissionGranted || isExactAlarmPermissionMissing || isBatteryOptimized) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Notifications, null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("讓提醒更準時送達", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text("完成以下權限設定，確保喝水與用餐提醒不會被系統靜音或延遲。", style = MaterialTheme.typography.bodySmall)
+                            }
                         }
-                        FilterChip(
-                            selected = false,
-                            onClick = {
-                                try {
-                                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                                        data = Uri.parse("package:${context.packageName}")
-                                    }
-                                    context.startActivity(intent)
-                                } catch (e: Exception) {
-                                    val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                                    context.startActivity(intent)
-                                }
-                            },
-                            label = { Text("前往設定") }
-                        )
-                    }
-                }
-            }
-
-            if (isExactAlarmPermissionMissing) {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Notifications, null)
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("需要精準鬧鐘權限", fontWeight = FontWeight.Bold)
-                            Text("開啟精準鬧鐘以確保提醒時間不會被系統延遲。", style = MaterialTheme.typography.bodySmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (!notificationPermissionGranted) {
+                                FilterChip(
+                                    selected = false,
+                                    onClick = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                                    label = { Text("開啟通知權限") }
+                                )
+                            }
+                            if (isExactAlarmPermissionMissing) {
+                                FilterChip(
+                                    selected = false,
+                                    onClick = {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                                data = Uri.parse("package:${context.packageName}")
+                                            }
+                                            context.startActivity(intent)
+                                        }
+                                    },
+                                    label = { Text("開啟準時提醒") }
+                                )
+                            }
+                            if (isBatteryOptimized) {
+                                FilterChip(
+                                    selected = false,
+                                    onClick = {
+                                        try {
+                                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                                data = Uri.parse("package:${context.packageName}")
+                                            }
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                            context.startActivity(intent)
+                                        }
+                                    },
+                                    label = { Text("允許背景執行") }
+                                )
+                            }
                         }
-                        FilterChip(
-                            selected = false,
-                            onClick = {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                    val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                                        data = Uri.parse("package:${context.packageName}")
-                                    }
-                                    context.startActivity(intent)
-                                }
-                            },
-                            label = { Text("允許") }
-                        )
-                    }
-                }
-            }
-
-            if (!notificationPermissionGranted) {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Notifications, null)
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("尚未允許通知", fontWeight = FontWeight.Bold)
-                            Text("開啟後才能收到用餐與喝水提醒。", style = MaterialTheme.typography.bodySmall)
-                        }
-                        FilterChip(selected = false, onClick = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }, label = { Text("允許") })
                     }
                 }
             }

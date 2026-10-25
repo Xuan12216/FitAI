@@ -326,7 +326,7 @@ fun FoodScannerScreen(
                                             Spacer(modifier = Modifier.width(12.dp))
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(
-                                                    text = "Gemma 視覺辨識結果",
+                                                    text = "✨ AI 視覺辨識結果",
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
                                                 )
@@ -360,7 +360,7 @@ fun FoodScannerScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "預測結果: ${state.detectedLabel} (信心度: ${(state.confidence * 100).toInt()}%)",
+                                    text = "辨識結果：${state.detectedLabel}",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -375,7 +375,7 @@ fun FoodScannerScreen(
                                 ) {
                                     Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                                         Text(
-                                            text = "FoodModifier 模型辨識結果",
+                                            text = "📸 其他可能餐點（點擊套用）",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.align(Alignment.Start)
@@ -390,8 +390,7 @@ fun FoodScannerScreen(
                                                 SuggestionChip(
                                                     onClick = { foodName = candidate.label },
                                                     label = {
-                                                        val percentage = candidate.confidence * 100
-                                                        Text("${candidate.label} (${String.format(java.util.Locale.US, "%.2f", percentage)}%)")
+                                                        Text(candidate.label)
                                                     }
                                                 )
                                             }
@@ -430,7 +429,7 @@ fun FoodScannerScreen(
                                 modifier = Modifier.fillMaxWidth().height(48.dp),
                                 enabled = canAnalyze
                             ) {
-                                Text(if (useReference) "開始 AI 營養評估" else "送出給本地 Gemma 分析")
+                                Text("✨ 開始 AI 營養評估")
                             }
 
                             OutlinedButton(
@@ -501,9 +500,7 @@ fun FoodScannerScreen(
                                 modifier = Modifier.align(Alignment.CenterHorizontally)
                             )
 
-                            if (state.referenceJson == null) {
-                                Text("估算 AI：${com.xuan.fitai.nutrition.nutritionEstimatorLabel(state.referenceJson, true)}", style = MaterialTheme.typography.labelMedium)
-                            }
+                            Text("估算 AI：${com.xuan.fitai.nutrition.nutritionEstimatorLabel(state.referenceJson, true)}", style = MaterialTheme.typography.labelMedium)
                             com.xuan.fitai.ui.components.NutritionReferenceBadge(state.referenceJson)
                             if (state.lookupMessage.isNotBlank() && (state.canRetryGoogle || state.referenceJson == null)) {
                                 Text(state.lookupMessage, style = MaterialTheme.typography.bodySmall)

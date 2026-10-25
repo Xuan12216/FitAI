@@ -70,17 +70,23 @@ internal fun WeightTrendDialog(
         containerColor = MaterialTheme.colorScheme.surface,
         dragHandle = { BottomSheetDefaults.DragHandle() }
     ) {
+        val fieldShape = RoundedCornerShape(14.dp)
+        val softFieldColors = OutlinedTextFieldDefaults.colors(
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+        )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 28.dp)
-                .navigationBarsPadding(),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .navigationBarsPadding()
         ) {
-            // Header
+            // Sticky Header
             Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -95,6 +101,16 @@ internal fun WeightTrendDialog(
                     fontWeight = FontWeight.Bold
                 )
             }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
 
             // Summary Metrics & Trend Chart Card
             val points = remember(entries) { entries.takeLast(30) }
@@ -341,15 +357,6 @@ internal fun WeightTrendDialog(
             }
 
             // Input Form
-            OutlinedButton(
-                onClick = { showDatePicker = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("紀錄日期：$date")
-            }
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -357,19 +364,33 @@ internal fun WeightTrendDialog(
                 OutlinedTextField(
                     value = weight,
                     onValueChange = { weight = it },
-                    label = { Text("體重 (kg) *") },
+                    label = { Text("⚖️ 體重 (kg) *") },
                     singleLine = true,
+                    shape = fieldShape,
+                    colors = softFieldColors,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.weight(1f)
                 )
                 OutlinedTextField(
                     value = target,
                     onValueChange = { target = it },
-                    label = { Text("目標體重 (kg)") },
+                    label = { Text("🎯 目標體重 (kg)") },
                     singleLine = true,
+                    shape = fieldShape,
+                    colors = softFieldColors,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.weight(1f)
                 )
+            }
+
+            OutlinedButton(
+                onClick = { showDatePicker = true },
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("紀錄日期：$date")
             }
 
             // Preview & Sync Profile Card
@@ -440,11 +461,14 @@ internal fun WeightTrendDialog(
                 }
             }
 
-            // Bottom Action Buttons
+            }
+
+            // Sticky Bottom Action Buttons
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp),
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedButton(

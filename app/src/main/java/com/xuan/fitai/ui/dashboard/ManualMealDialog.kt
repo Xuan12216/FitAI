@@ -281,49 +281,13 @@ internal fun ManualMealDialog(
                 }
             }
 
-            // Date, Time & Meal Type Section
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedButton(
-                    onClick = { showDatePicker = true },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(date)
-                }
-                OutlinedButton(
-                    onClick = {
-                        TimePickerDialog(context, { _, h, m ->
-                            hour = h; minute = m
-                            if (automaticType) type = com.xuan.fitai.data.model.MealPeriod.forHour(h)
-                        }, hour, minute, true).show()
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(String.format(Locale.ROOT, "%02d:%02d", hour, minute))
-                }
-            }
-
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                com.xuan.fitai.data.model.MealPeriod.ordered.forEach { label ->
-                    FilterChip(
-                        selected = type == label,
-                        onClick = { type = label; automaticType = false },
-                        label = { Text(label) }
-                    )
-                }
-            }
-
-            // Meal Name & Portion
+            // Meal Name & Portion (First priority!)
+            val fieldShape = RoundedCornerShape(14.dp)
+            val softFieldColors = OutlinedTextFieldDefaults.colors(
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -339,9 +303,11 @@ internal fun ManualMealDialog(
                         aiReasoning = ""
                     },
                     enabled = !isAiAnalyzing,
-                    label = { Text("餐點名稱") },
+                    label = { Text("吃了什麼？") },
                     placeholder = { Text("例如：雞胸肉便當") },
                     singleLine = true,
+                    shape = fieldShape,
+                    colors = softFieldColors,
                     modifier = Modifier.weight(1.8f)
                 )
                 OutlinedTextField(
@@ -356,10 +322,107 @@ internal fun ManualMealDialog(
                     },
                     enabled = !isAiAnalyzing,
                     label = { Text("份量") },
-                    placeholder = { Text("1份 / 200g") },
+                    placeholder = { Text("1份 / 5顆") },
                     singleLine = true,
+                    shape = fieldShape,
+                    colors = softFieldColors,
                     modifier = Modifier.weight(1f)
                 )
+            }
+
+            // Collapsible Date, Time & Meal Type Pill
+            var showTimeEditor by rememberSaveable { mutableStateOf(false) }
+            val friendlyDate = remember(date) {
+                val parsed = runCatching { LocalDate.parse(date) }.getOrNull()
+                val today = LocalDate.now()
+                when (parsed) {
+                    today -> "今天"
+                    today.minusDays(1) -> "昨天"
+                    null -> date
+                    else -> "${parsed.monthValue}/${parsed.dayOfMonth}"
+                }
+            }
+            Surface(
+                onClick = { showTimeEditor = !showTimeEditor },
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Schedule,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "$friendlyDate ${String.format(Locale.ROOT, "%02d:%02d", hour, minute)}  ·  $type",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        Text(
+                            text = if (showTimeEditor) "收起 ▴" else "修改時間／餐別 ▾",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    AnimatedVisibility(visible = showTimeEditor) {
+                        Column(
+                            modifier = Modifier.padding(top = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedButton(
+                                    onClick = { showDatePicker = true },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(date)
+                                }
+                                OutlinedButton(
+                                    onClick = {
+                                        TimePickerDialog(context, { _, h, m ->
+                                            hour = h; minute = m
+                                            if (automaticType) type = com.xuan.fitai.data.model.MealPeriod.forHour(h)
+                                        }, hour, minute, true).show()
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(String.format(Locale.ROOT, "%02d:%02d", hour, minute))
+                                }
+                            }
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                com.xuan.fitai.data.model.MealPeriod.ordered.forEach { label ->
+                                    FilterChip(
+                                        selected = type == label,
+                                        onClick = { type = label; automaticType = false },
+                                        label = { Text(label) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // AI Estimation & TFDA Reference Section
@@ -372,12 +435,11 @@ internal fun ManualMealDialog(
                     modifier = Modifier.padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    NutritionReferenceToggle(useReference, { useReference = it }, !isAiAnalyzing)
-
                     Button(
                         onClick = { startAiEstimate() },
                         enabled = !isAiAnalyzing && portion.isNotBlank() && mealName.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().height(46.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                             contentColor = MaterialTheme.colorScheme.onTertiaryContainer
@@ -389,7 +451,7 @@ internal fun ManualMealDialog(
                                 color = MaterialTheme.colorScheme.onTertiaryContainer
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(analysisStatus.ifBlank { "本地 AI 估算中…" })
+                            Text("AI 估算中…")
                         } else {
                             Icon(
                                 imageVector = Icons.Default.AutoAwesome,
@@ -397,9 +459,15 @@ internal fun ManualMealDialog(
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("AI 估算熱量與營養素")
+                            Text("AI 估算熱量與營養素", fontWeight = FontWeight.SemiBold)
                         }
                     }
+
+                    if (isAiAnalyzing && analysisStatus.isNotBlank()) {
+                        Text(analysisStatus, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    NutritionReferenceToggle(useReference, { useReference = it }, !isAiAnalyzing)
 
                     if (lookupMessage.isNotBlank() && (canRetryGoogle || referenceJson == null)) {
                         Text(
@@ -414,7 +482,7 @@ internal fun ManualMealDialog(
                             Text("再查一次網路 AI")
                         }
                     }
-                    if (aiEstimated && referenceJson == null) {
+                    if (aiEstimated) {
                         Text("估算 AI：${com.xuan.fitai.nutrition.nutritionEstimatorLabel(referenceJson, true)}", style = MaterialTheme.typography.labelMedium)
                     }
                     NutritionReferenceBadge(referenceJson)
@@ -428,11 +496,10 @@ internal fun ManualMealDialog(
                     }
 
                     if (isAiAnalyzing || aiReasoning.isNotBlank()) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                            )
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.55f),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
                                 Text(
@@ -453,10 +520,11 @@ internal fun ManualMealDialog(
                 }
             }
 
-            // 2x2 Grid for Nutrition Values
+            // 2x2 Soft Dashboard Grid for Nutrition Values
             Text(
-                text = "營養數值（可手動微調）",
-                style = MaterialTheme.typography.titleSmall,
+                text = "營養數值（點擊可直接微調）",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.SemiBold
             )
 
@@ -467,17 +535,21 @@ internal fun ManualMealDialog(
                 OutlinedTextField(
                     value = caloriesVal,
                     onValueChange = { caloriesVal = it },
-                    label = { Text("熱量 (kcal) *") },
+                    label = { Text("🔥 熱量 (kcal) *") },
                     isError = isCaloriesInvalid,
                     singleLine = true,
+                    shape = fieldShape,
+                    colors = softFieldColors,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.weight(1f)
                 )
                 OutlinedTextField(
                     value = proteinVal,
                     onValueChange = { proteinVal = it },
-                    label = { Text("蛋白質 (g)") },
+                    label = { Text("🥩 蛋白質 (g)") },
                     singleLine = true,
+                    shape = fieldShape,
+                    colors = softFieldColors,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.weight(1f)
                 )
@@ -490,16 +562,20 @@ internal fun ManualMealDialog(
                 OutlinedTextField(
                     value = carbsVal,
                     onValueChange = { carbsVal = it },
-                    label = { Text("碳水化合物 (g)") },
+                    label = { Text("🍚 碳水化合物 (g)") },
                     singleLine = true,
+                    shape = fieldShape,
+                    colors = softFieldColors,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.weight(1f)
                 )
                 OutlinedTextField(
                     value = fatVal,
                     onValueChange = { fatVal = it },
-                    label = { Text("脂肪 (g)") },
+                    label = { Text("🥑 脂肪 (g)") },
                     singleLine = true,
+                    shape = fieldShape,
+                    colors = softFieldColors,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.weight(1f)
                 )
